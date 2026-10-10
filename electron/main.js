@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Notification, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Readable } = require('stream');
 const engine = require('./engine');
+const stt = require('./transcribe');
 
 // Protocolo "media://" para o preview tocar arquivos locais com segurança
 protocol.registerSchemesAsPrivileged([
@@ -193,6 +194,71 @@ ipcMain.handle('media:peaks', async (_e, filePath) => {
   return engine.audioPeaks(filePath, 50);
 });
 
+// ---------- Legenda automática (IA local) ----------
+
+const modelsDir = () => path.join(app.getPath('userData'), 'modelos');
+const transcriptsDir = () => path.join(app.getPath('userData'), 'transcricoes');
+let downloadAbort = null;
+let currentStt = null;
+
+ipcMain.handle('captions:status', () => ({
+  available: stt.isAvailable(),
+  models: stt.modelStatus(modelsDir()),
+}));
+
+ipcMain.handle('captions:download', async (event, key) => {
+  if (downloadAbort) throw new Error('Já existe um download em andamento.');
+  downloadAbort = new AbortController();
+  try {
+    await stt.downloadModel(
+      modelsDir(),
+      key,
+      (p, bytes) => event.sender.send('captions:download-progress', { key, p, bytes }),
+      (url, opts) => net.fetch(url, opts),
+      downloadAbort.signal
+    );
+    return { ok: true };
+  } catch (err) {
+    if (downloadAbort?.signal.aborted) return { cancelled: true };
+    throw new Error(`Não foi possível baixar o modelo: ${err.message}`);
+  } finally {
+    downloadAbort = null;
+  }
+});
+
+ipcMain.handle('captions:cancel-download', () => downloadAbort?.abort());
+
+ipcMain.handle('captions:transcribe', async (event, { filePath, model, language }) => {
+  if (!allowedFiles.has(filePath)) throw new Error('Arquivo não autorizado.');
+  if (currentStt) throw new Error('Já existe uma transcrição em andamento.');
+  // mesmo arquivo + modelo + idioma: devolve a transcrição já feita
+  const key = stt.cacheKey(filePath, model, language);
+  const cached = path.join(transcriptsDir(), `${key}.json`);
+  try {
+    return JSON.parse(fs.readFileSync(cached, 'utf8'));
+  } catch {}
+  let proc = null;
+  currentStt = { cancel: () => proc && proc.kill('SIGKILL') };
+  try {
+    const res = await stt.transcribe(filePath, {
+      modelsDir: modelsDir(),
+      model,
+      language,
+      onSpawn: (p) => (proc = p),
+      onProgress: (p) => event.sender.send('captions:progress', { filePath, p }),
+    });
+    if (!res.cancelled) {
+      fs.mkdirSync(transcriptsDir(), { recursive: true });
+      fs.writeFileSync(cached, JSON.stringify(res), 'utf8');
+    }
+    return res;
+  } finally {
+    currentStt = null;
+  }
+});
+
+ipcMain.handle('captions:cancel', () => currentStt?.cancel());
+
 // ---------- Projetos ----------
 
 function readProject(file) {
@@ -373,5 +439,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (currentExport) currentExport.cancel();
+  if (currentStt) currentStt.cancel();
   if (process.platform !== 'darwin') app.quit();
 });

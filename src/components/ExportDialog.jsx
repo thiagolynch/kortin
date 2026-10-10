@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import { ASPECTS, FITS, QUALITIES, formatTime } from '../lib/timeline';
+import { MAX_CHARS, cuesForExport, deriveCues } from '../lib/captions';
 
 /** Configura a exportação e devolve os trabalhos para a fila (a exportação roda em segundo plano). */
-export default function ExportDialog({ clips, total, aspect, fit, projectName, onQueue, onClose }) {
+export default function ExportDialog({
+  clips, total, aspect, fit, projectName, segments, transcripts, captionSettings, onQueue, onClose,
+}) {
   const [formats, setFormats] = useState([aspect]);
   const [quality, setQuality] = useState('padrao');
   const [hardware, setHardware] = useState(null); // null = verificando, [] = nenhuma
   const [useHw, setUseHw] = useState(true);
   const [busy, setBusy] = useState(false);
+  const hasCaptions = !!segments?.length && Object.keys(transcripts || {}).length > 0;
+  const [withCaptions, setWithCaptions] = useState(hasCaptions && captionSettings?.enabled);
 
   useEffect(() => {
     let alive = true;
@@ -36,9 +41,15 @@ export default function ExportDialog({ clips, total, aspect, fit, projectName, o
       }
       const q = QUALITIES[quality];
       const encoder = useHw && hardware?.length ? hardware[0].id : 'libx264';
-      const snapshot = clips.map(({ path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut }) => ({
-        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut,
+      const snapshot = clips.map(({ path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise }) => ({
+        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise,
       }));
+      // a legenda é montada por formato: no vertical, frases mais curtas
+      const captionsFor = (k) => {
+        if (!withCaptions) return undefined;
+        const cues = cuesForExport(deriveCues(segments, transcripts, { maxChars: MAX_CHARS[k] || 28 }));
+        return cues.length ? { cues, settings: captionSettings } : undefined;
+      };
       onQueue(
         formats.map((k, i) => ({
           label: `${ASPECTS[k].label} · ${outputs[i].split(/[\\/]/).pop()}`,
@@ -47,7 +58,7 @@ export default function ExportDialog({ clips, total, aspect, fit, projectName, o
           clips: snapshot,
           options: {
             width: ASPECTS[k].width, height: ASPECTS[k].height, fit, fps: 30,
-            crf: q.crf, preset: q.preset, encoder, output: outputs[i],
+            crf: q.crf, preset: q.preset, encoder, output: outputs[i], captions: captionsFor(k),
           },
         }))
       );
@@ -93,6 +104,16 @@ export default function ExportDialog({ clips, total, aspect, fit, projectName, o
             </button>
           ))}
         </div>
+
+        {hasCaptions && (
+          <label className="hw-toggle">
+            <input type="checkbox" checked={withCaptions} onChange={(e) => setWithCaptions(e.target.checked)} />
+            <span>
+              <strong>Incluir legenda no vídeo</strong>
+              <small>A legenda fica gravada na imagem, no estilo escolhido. Em cada formato ela se ajusta ao tamanho da tela.</small>
+            </span>
+          </label>
+        )}
 
         <label className={`hw-toggle${hardware?.length ? '' : ' disabled'}`}>
           <input

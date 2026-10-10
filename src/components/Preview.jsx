@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { ASPECTS } from '../lib/timeline';
+import CaptionOverlay from './CaptionOverlay';
 
-export default function Preview({ player, aspect, fit, currentClip, empty, onImport, onOpenProject }) {
+export default function Preview({ player, aspect, fit, currentClip, empty, onImport, onOpenProject, cues, captionSettings }) {
   const wrapRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const a = ASPECTS[aspect];
@@ -39,6 +40,7 @@ export default function Preview({ player, aspect, fit, currentClip, empty, onImp
           preload="auto"
           crossOrigin="anonymous"
         />
+        <CaptionOverlay cues={cues} time={player.time} settings={captionSettings} width={box.w} height={box.h} />
         {empty && (
           <div className="frame-empty">
             <button className="frame-empty-main" onClick={onImport}>

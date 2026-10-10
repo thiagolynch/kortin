@@ -1,7 +1,7 @@
 {
   "name": "kortin",
   "productName": "Kortin",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Editor de vídeo sem anúncios e sem marca d'água, com IA. Módulo 1: editor base.",
   "main": "electron/main.js",
   "author": "Thiago Lynch",
@@ -13,7 +13,9 @@
     "build": "vite build",
     "start": "vite build && electron .",
     "dist": "vite build && electron-builder --win --publish never",
-    "test:engine": "node tests/engine.test.js"
+    "test:engine": "node tests/engine.test.js",
+    "setup:whisper": "node scripts/build-whisper.mjs",
+    "test:whisper": "node scripts/test-whisper.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -39,11 +41,13 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "assets/fonts/**",
       "build/icon.png",
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules/ffmpeg-static/**"
+      "node_modules/ffmpeg-static/**",
+      "assets/fonts/**"
     ],
     "win": {
       "target": [
@@ -73,7 +77,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "SEU-USUARIO-GITHUB",
+        "owner": "thiagolynch",
         "repo": "kortin"
       }
     ],
@@ -83,6 +87,15 @@
         "name": "Projeto Kortin",
         "description": "Projeto do Kortin",
         "role": "Editor"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/whisper/${os}",
+        "to": "whisper",
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   }

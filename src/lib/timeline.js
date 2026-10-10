@@ -140,22 +140,29 @@ export function mediaToClip(m) {
     speed: 1,
     fadeIn: 0,
     fadeOut: 0,
+    denoise: false,
   };
 }
 
-export const PROJECT_VERSION = 2;
+export const PROJECT_VERSION = 3;
 
 /** Converte o estado do editor no conteúdo do arquivo .kortin */
-export function serializeProject({ clips, aspect, fit }) {
+export function serializeProject({ clips, aspect, fit, captions, transcripts }) {
+  const used = new Set(clips.map((c) => c.path));
   return {
     app: 'kortin',
     version: PROJECT_VERSION,
     aspect,
     fit,
-    clips: clips.map(({ id, path, name, inPoint, outPoint, volume, speed, fadeIn, fadeOut }) => ({
+    clips: clips.map(({ id, path, name, inPoint, outPoint, volume, speed, fadeIn, fadeOut, denoise }) => ({
       id, path, name, inPoint, outPoint,
-      volume: volume ?? 1, speed: speed ?? 1, fadeIn: fadeIn ?? 0, fadeOut: fadeOut ?? 0,
+      volume: volume ?? 1, speed: speed ?? 1, fadeIn: fadeIn ?? 0, fadeOut: fadeOut ?? 0, denoise: !!denoise,
     })),
+    ...(captions ? { captions } : {}),
+    // só as transcrições dos vídeos que estão no projeto
+    ...(transcripts
+      ? { transcripts: Object.fromEntries(Object.entries(transcripts).filter(([p]) => used.has(p))) }
+      : {}),
   };
 }
 
@@ -176,6 +183,7 @@ export function restoreClips(saved, infoByPath) {
         speed: SPEEDS.includes(c.speed) ? c.speed : 1,
         fadeIn: clamp(c.fadeIn ?? 0, 0, MAX_FADE),
         fadeOut: clamp(c.fadeOut ?? 0, 0, MAX_FADE),
+        denoise: !!c.denoise,
       };
     });
 }

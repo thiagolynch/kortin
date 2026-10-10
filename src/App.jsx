@@ -6,6 +6,8 @@ import Inspector from './components/Inspector';
 import ExportDialog from './components/ExportDialog';
 import ExportQueue from './components/ExportQueue';
 import Welcome from './components/Welcome';
+import CaptionsPanel from './components/CaptionsPanel';
+import { DEFAULT_CAPTIONS, MAX_CHARS, deriveCues, editCue } from './lib/captions';
 import { Icon, Logo } from './components/Icons';
 import { usePlayer } from './lib/usePlayer';
 import {
@@ -46,7 +48,7 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const [projectPath, setProjectPath] = useState(null);
   const [savedJson, setSavedJson] = useState(() =>
-    JSON.stringify(serializeProject({ clips: [], aspect: '9:16', fit: 'blur' }))
+    JSON.stringify(serializeProject({ clips: [], aspect: '9:16', fit: 'blur', captions: DEFAULT_CAPTIONS, transcripts: {} }))
   );
   const [recovery, setRecovery] = useState(null);
   const [snap, setSnap] = useState(true);
@@ -55,6 +57,9 @@ export default function App() {
   const [welcome, setWelcome] = useState(() => hasBridge && !readFlag(WELCOME_KEY));
   const [update, setUpdate] = useState(null);
   const [version, setVersion] = useState('');
+  const [captionSettings, setCaptionSettings] = useState(DEFAULT_CAPTIONS);
+  const [transcripts, setTranscripts] = useState({});
+  const [leftTab, setLeftTab] = useState('media');
 
   // ---------- Histórico (desfazer / refazer) ----------
   const clipsRef = useRef(clips);
@@ -104,6 +109,10 @@ export default function App() {
   const selectedClip = clips.find((c) => c.id === selectedId) || null;
   const selectedSegment = segments.find((s) => s.clip.id === selectedId) || null;
   const currentClip = locate(segments, player.time)?.seg.clip || null;
+  const cues = useMemo(
+    () => deriveCues(segments, transcripts, { maxChars: MAX_CHARS[aspect] || 28 }),
+    [segments, transcripts, aspect]
+  );
 
   const toastTimer = useRef(0);
   const showToast = useCallback((msg) => {
@@ -113,7 +122,10 @@ export default function App() {
   }, []);
 
   // ---------- Estado do projeto (salvo / não salvo) ----------
-  const projectData = useMemo(() => serializeProject({ clips, aspect, fit }), [clips, aspect, fit]);
+  const projectData = useMemo(
+    () => serializeProject({ clips, aspect, fit, captions: captionSettings, transcripts }),
+    [clips, aspect, fit, captionSettings, transcripts]
+  );
   const projectJson = useMemo(() => JSON.stringify(projectData), [projectData]);
   const dirty = projectJson !== savedJson;
   const projectName = projectPath ? baseName(projectPath) : 'Sem título';
@@ -201,11 +213,15 @@ export default function App() {
     const nextAspect = ASPECTS[data.aspect] ? data.aspect : '9:16';
     const nextFit = FITS[data.fit] ? data.fit : 'blur';
 
+    const nextCaptions = { ...DEFAULT_CAPTIONS, ...(data.captions || {}) };
+    const nextTranscripts = data.transcripts || {};
     setMedia(ok);
     loadPeaks(ok);
     setClipsRaw(restored);
     setAspect(nextAspect);
     setFit(nextFit);
+    setCaptionSettings(nextCaptions);
+    setTranscripts(nextTranscripts);
     setSelectedId(restored[0]?.id || null);
     resetHistory();
     player.seek(0);
@@ -215,7 +231,9 @@ export default function App() {
       setSavedJson('');
     } else {
       setProjectPath(path);
-      setSavedJson(JSON.stringify(serializeProject({ clips: restored, aspect: nextAspect, fit: nextFit })));
+      setSavedJson(JSON.stringify(serializeProject({
+        clips: restored, aspect: nextAspect, fit: nextFit, captions: nextCaptions, transcripts: nextTranscripts,
+      })));
     }
 
     if (errors.length) {
@@ -262,7 +280,9 @@ export default function App() {
     setProjectPath(null);
     resetHistory();
     player.seek(0);
-    setSavedJson(JSON.stringify(serializeProject({ clips: [], aspect, fit })));
+    setCaptionSettings(DEFAULT_CAPTIONS);
+    setTranscripts({});
+    setSavedJson(JSON.stringify(serializeProject({ clips: [], aspect, fit, captions: DEFAULT_CAPTIONS, transcripts: {} })));
     window.kortin.autosaveClear();
   }, [aspect, confirmDiscard, fit, player, resetHistory]);
 
@@ -387,6 +407,17 @@ export default function App() {
     setSelectedId(moved.id);
   }, [commit]);
 
+  // ---------- Legendas ----------
+  const addTranscripts = useCallback((results) => {
+    setTranscripts((prev) => ({ ...prev, ...results }));
+    setCaptionSettings((s) => ({ ...s, enabled: true }));
+  }, []);
+
+  const applyCleanup = useCallback((plan, msg) => {
+    commit(plan.clips);
+    showToast(`Fala limpa: ${msg}. Ctrl+Z desfaz.`);
+  }, [commit, showToast]);
+
   // ---------- Atalhos de teclado ----------
   const keys = useRef({});
   keys.current = { player, split, removeSelected, duplicateSelected, undo, redo, saveProject, openProject, newProject, setSnap };
@@ -498,7 +529,33 @@ export default function App() {
       </header>
 
       <main className="workspace">
-        <MediaBin media={media} busy={busy} onImport={openImport} onAdd={addFromBin} />
+        <aside className="panel bin">
+          <div className="panel-tabs" role="tablist">
+            <button role="tab" aria-selected={leftTab === 'media'} className={leftTab === 'media' ? 'active' : ''} onClick={() => setLeftTab('media')}>
+              <Icon.Film width={14} height={14} /> Mídia
+            </button>
+            <button role="tab" aria-selected={leftTab === 'captions'} className={leftTab === 'captions' ? 'active' : ''} onClick={() => setLeftTab('captions')}>
+              <Icon.Captions width={14} height={14} /> Legendas{cues.length ? <span className="tab-badge">{cues.length}</span> : null}
+            </button>
+          </div>
+          {leftTab === 'media' ? (
+            <MediaBin media={media} busy={busy} onImport={openImport} onAdd={addFromBin} />
+          ) : (
+            <CaptionsPanel
+              clips={clips}
+              cues={cues}
+              transcripts={transcripts}
+              settings={captionSettings}
+              time={player.time}
+              onSettings={(patch) => setCaptionSettings((s) => ({ ...s, ...patch }))}
+              onTranscripts={addTranscripts}
+              onCueEdit={(cue, text) => setTranscripts((t) => editCue(t, cue, text))}
+              onSeek={(t) => { player.pause(); player.seek(t); }}
+              onApplyCleanup={applyCleanup}
+              notify={showToast}
+            />
+          )}
+        </aside>
         <div className="stage">
           {recovery && (
             <div className="recovery">
@@ -525,6 +582,8 @@ export default function App() {
             empty={!clips.length}
             onImport={openImport}
             onOpenProject={() => openProject()}
+            cues={cues}
+            captionSettings={captionSettings}
           />
         </div>
         <Inspector
@@ -596,6 +655,7 @@ export default function App() {
           selectedId={selectedId}
           snap={snap}
           peaksByPath={peaksByPath}
+          cues={captionSettings.enabled ? cues : []}
           onSeek={player.seek}
           onSelect={setSelectedId}
           onTrimStart={snapshot}
@@ -613,6 +673,9 @@ export default function App() {
           aspect={aspect}
           fit={fit}
           projectName={projectPath ? projectName : null}
+          segments={segments}
+          transcripts={transcripts}
+          captionSettings={captionSettings}
           onQueue={enqueue}
           onClose={() => setExporting(false)}
         />

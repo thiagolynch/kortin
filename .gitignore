@@ -4,3 +4,5 @@ release/
 *.log
 .DS_Store
 tests/tmp/
+vendor/
+vendor-src/

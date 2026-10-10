@@ -39,7 +39,7 @@ const Waveform = memo(function Waveform({ peaks, inPoint, outPoint, width, volum
 });
 
 export default function Timeline({
-  segments, total, time, zoom, setZoom, playing, selectedId, snap, peaksByPath,
+  segments, total, time, zoom, setZoom, playing, selectedId, snap, peaksByPath, cues = [],
   onSeek, onSelect, onTrimStart, onTrim, onReorder,
 }) {
   const scrollRef = useRef(null);
@@ -249,6 +249,22 @@ export default function Timeline({
 
           {dropHint && <div className="tl-drop" style={{ left: dropHint.x - 1 }} />}
         </div>
+
+        {cues.length > 0 && (
+          <div className="tl-captions" aria-label="Legendas">
+            {cues.map((c) => (
+              <div
+                key={c.id}
+                className="tl-cue"
+                style={{ left: PAD + c.start * zoom, width: Math.max(2, (c.end - c.start) * zoom - 1) }}
+                title={c.words.map((w) => w.text).join(' ')}
+                onPointerDown={(e) => { e.stopPropagation(); onSeek(c.start + 0.01); }}
+              >
+                {(c.end - c.start) * zoom > 40 && <span>{c.words.map((w) => w.text).join(' ')}</span>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {snapLine != null && <div className="tl-snapline" style={{ left: PAD + snapLine * zoom }} />}
 
