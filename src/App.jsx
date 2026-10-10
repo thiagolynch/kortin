@@ -4,6 +4,8 @@ import Timeline from './components/Timeline';
 import MediaBin from './components/MediaBin';
 import Inspector from './components/Inspector';
 import ExportDialog from './components/ExportDialog';
+import ExportQueue from './components/ExportQueue';
+import Welcome from './components/Welcome';
 import { Icon, Logo } from './components/Icons';
 import { usePlayer } from './lib/usePlayer';
 import {
@@ -15,6 +17,14 @@ const HISTORY_LIMIT = 100;
 const AUTOSAVE_DELAY = 1500;
 const hasBridge = typeof window !== 'undefined' && !!window.kortin;
 const isProjectFile = (p) => /\.kortin$/i.test(p);
+const WELCOME_KEY = 'kortin.boasVindas';
+
+function readFlag(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writeFlag(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* sem armazenamento: tudo bem */ }
+}
 
 function formatWhen(ms) {
   const d = new Date(ms);
@@ -39,6 +49,12 @@ export default function App() {
     JSON.stringify(serializeProject({ clips: [], aspect: '9:16', fit: 'blur' }))
   );
   const [recovery, setRecovery] = useState(null);
+  const [snap, setSnap] = useState(true);
+  const [peaksByPath, setPeaksByPath] = useState({});
+  const [jobs, setJobs] = useState([]);
+  const [welcome, setWelcome] = useState(() => hasBridge && !readFlag(WELCOME_KEY));
+  const [update, setUpdate] = useState(null);
+  const [version, setVersion] = useState('');
 
   // ---------- Histórico (desfazer / refazer) ----------
   const clipsRef = useRef(clips);
@@ -122,6 +138,18 @@ export default function App() {
     return window.confirm('Você tem alterações não salvas neste projeto. Deseja descartá-las?');
   }, [dirty]);
 
+  // ---------- Onda sonora (lida em segundo plano, sem travar a importação) ----------
+  const peaksAsked = useRef(new Set());
+  const loadPeaks = useCallback((items) => {
+    for (const m of items) {
+      if (!m.hasAudio || peaksAsked.current.has(m.path)) continue;
+      peaksAsked.current.add(m.path);
+      window.kortin.peaks(m.path)
+        .then((peaks) => setPeaksByPath((prev) => ({ ...prev, [m.path]: peaks })))
+        .catch(() => peaksAsked.current.delete(m.path));
+    }
+  }, []);
+
   // ---------- Importação ----------
   const probeAll = useCallback(async (paths) => {
     const ok = [];
@@ -143,6 +171,7 @@ export default function App() {
     const { ok, errors } = await probeAll(paths);
     if (ok.length) {
       setMedia((m) => [...m, ...ok.filter((a) => !m.some((x) => x.path === a.path))]);
+      loadPeaks(ok);
       const newClips = ok.map(mediaToClip);
       commit([...clipsRef.current, ...newClips]);
       setSelectedId(newClips[newClips.length - 1].id);
@@ -150,7 +179,7 @@ export default function App() {
     if (errors.length) {
       showToast(`Não foi possível importar: ${errors.map((e) => `${baseName(e.path)} (${e.message})`).join(' · ')}`);
     }
-  }, [commit, probeAll, showToast]);
+  }, [commit, loadPeaks, probeAll, showToast]);
 
   const openImport = useCallback(async () => {
     importPaths(await window.kortin.openVideos());
@@ -173,6 +202,7 @@ export default function App() {
     const nextFit = FITS[data.fit] ? data.fit : 'blur';
 
     setMedia(ok);
+    loadPeaks(ok);
     setClipsRaw(restored);
     setAspect(nextAspect);
     setFit(nextFit);
@@ -195,7 +225,7 @@ export default function App() {
     } else {
       showToast(recovered ? 'Projeto recuperado.' : `Projeto "${baseName(path)}" aberto.`);
     }
-  }, [player, probeAll, resetHistory, showToast]);
+  }, [player, loadPeaks, probeAll, resetHistory, showToast]);
 
   const openProject = useCallback(async (filePath) => {
     if (!confirmDiscard()) return;
@@ -257,6 +287,62 @@ export default function App() {
 
   useEffect(() => (hasBridge ? window.kortin.onOpenFiles(openPaths) : undefined), [openPaths]);
 
+  // ---------- Atualizações ----------
+  useEffect(() => {
+    if (!hasBridge) return undefined;
+    window.kortin.version().then(setVersion).catch(() => {});
+    return window.kortin.onUpdateReady(setUpdate);
+  }, []);
+
+  // ---------- Fila de exportação (roda em segundo plano, um vídeo por vez) ----------
+  const runningRef = useRef(null);
+  const enqueue = useCallback((list) => {
+    setJobs((js) => [...js, ...list.map((x) => ({ ...x, id: uid(), status: 'queued', progress: 0 }))]);
+  }, []);
+
+  useEffect(() => {
+    if (!hasBridge) return undefined;
+    const offP = window.kortin.onExportProgress((p) =>
+      setJobs((js) => js.map((j) => (j.id === runningRef.current ? { ...j, progress: p } : j))));
+    const offE = window.kortin.onExportEncoder((enc) =>
+      setJobs((js) => js.map((j) => (j.id === runningRef.current ? { ...j, encoder: enc } : j))));
+    return () => { offP(); offE(); };
+  }, []);
+
+  useEffect(() => {
+    if (runningRef.current) return;
+    const next = jobs.find((j) => j.status === 'queued');
+    if (!next) return;
+    runningRef.current = next.id;
+    setJobs((js) => js.map((j) => (j.id === next.id ? { ...j, status: 'running' } : j)));
+    const patch = (fields) => setJobs((js) => js.map((j) => (j.id === next.id ? { ...j, ...fields } : j)));
+    window.kortin.startExport({ clips: next.clips, options: next.options })
+      .then((res) => {
+        if (res?.cancelled) return patch({ status: 'cancelled' });
+        patch({ status: 'done', progress: 100, encoder: res?.encoder, fellBack: res?.fellBack });
+        showToast(`Vídeo pronto: ${next.output.split(/[\\/]/).pop()}`);
+      })
+      .catch((err) => patch({ status: 'error', error: cleanError(err) }))
+      .finally(() => {
+        runningRef.current = null;
+        setJobs((js) => [...js]); // dispara o próximo da fila
+      });
+  }, [jobs, showToast]);
+
+  const cancelJob = useCallback((id) => {
+    if (id === runningRef.current) window.kortin.cancelExport();
+    else setJobs((js) => js.map((j) => (j.id === id && j.status === 'queued' ? { ...j, status: 'cancelled' } : j)));
+  }, []);
+
+  const clearJobs = useCallback(() => setJobs((js) => js.filter((j) => j.status === 'running' || j.status === 'queued')), []);
+
+  const finishWelcome = useCallback((choice, importNow) => {
+    writeFlag(WELCOME_KEY, '1');
+    setWelcome(false);
+    setAspect(choice);
+    if (importNow) window.kortin.openVideos().then((paths) => importPaths(paths));
+  }, [importPaths]);
+
   // ---------- Edição ----------
   const split = useCallback(() => {
     const res = splitAt(clipsRef.current, player.time);
@@ -303,10 +389,10 @@ export default function App() {
 
   // ---------- Atalhos de teclado ----------
   const keys = useRef({});
-  keys.current = { player, split, removeSelected, duplicateSelected, undo, redo, saveProject, openProject, newProject };
+  keys.current = { player, split, removeSelected, duplicateSelected, undo, redo, saveProject, openProject, newProject, setSnap };
   useEffect(() => {
     const onKey = (e) => {
-      if (exporting) return;
+      if (exporting || welcome) return;
       const k = keys.current;
       const ctrl = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
@@ -321,6 +407,7 @@ export default function App() {
       else if (ctrl && key === 'z' && !e.shiftKey) { e.preventDefault(); k.undo(); }
       else if (ctrl && (key === 'y' || (e.shiftKey && key === 'z'))) { e.preventDefault(); k.redo(); }
       else if (ctrl && key === 'd') { e.preventDefault(); k.duplicateSelected(); }
+      else if (!ctrl && key === 'n') { e.preventDefault(); k.setSnap((v) => !v); }
       else if (!ctrl && key === 's') { e.preventDefault(); k.split(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); k.removeSelected(); }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -333,7 +420,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [exporting]);
+  }, [exporting, welcome]);
 
   // ---------- Arrastar arquivos para a janela ----------
   const onWindowDragOver = (e) => {
@@ -399,6 +486,8 @@ export default function App() {
         </div>
 
         <div className="topbar-right">
+          <ExportQueue jobs={jobs} onCancel={cancelJob} onShow={(p) => window.kortin.showInFolder(p)} onClear={clearJobs} />
+          <button className="icon-btn" onClick={() => setWelcome(true)} title="Boas-vindas e atalhos"><Icon.Help /></button>
           <button className="btn ghost ai-soon" disabled title="Chega no módulo 3">
             <Icon.Sparkles width={15} height={15} /> Corte com IA <small>em breve</small>
           </button>
@@ -447,9 +536,11 @@ export default function App() {
           onSplit={split}
           onDuplicate={duplicateSelected}
           onDelete={removeSelected}
-          onReset={() => updateClip(selectedId, { inPoint: 0, outPoint: selectedClip.duration })}
-          onVolumeStart={snapshot}
-          onVolume={(v) => updateClip(selectedId, { volume: v }, false)}
+          onReset={() => updateClip(selectedId, {
+            inPoint: 0, outPoint: selectedClip.duration, speed: 1, volume: 1, fadeIn: 0, fadeOut: 0,
+          })}
+          onChangeStart={snapshot}
+          onChange={(patch) => updateClip(selectedId, patch, false)}
         />
       </main>
 
@@ -462,6 +553,15 @@ export default function App() {
             <button className="icon-btn" onClick={split} disabled={!clips.length} title="Dividir no cursor (S)"><Icon.Split /></button>
             <button className="icon-btn" onClick={duplicateSelected} disabled={!selectedId} title="Duplicar clipe (Ctrl+D)"><Icon.Copy /></button>
             <button className="icon-btn" onClick={removeSelected} disabled={!selectedId} title="Excluir clipe (Delete)"><Icon.Trash /></button>
+            <span className="divider" />
+            <button
+              className={`icon-btn toggle${snap ? ' on' : ''}`}
+              onClick={() => setSnap((v) => !v)}
+              aria-pressed={snap}
+              title={`Ímã ${snap ? 'ligado' : 'desligado'} (N): cortes e cursor grudam nas emendas`}
+            >
+              <Icon.Magnet />
+            </button>
           </div>
 
           <div className="toolbar-group center">
@@ -494,6 +594,8 @@ export default function App() {
           setZoom={setZoom}
           playing={player.playing}
           selectedId={selectedId}
+          snap={snap}
+          peaksByPath={peaksByPath}
           onSeek={player.seek}
           onSelect={setSelectedId}
           onTrimStart={snapshot}
@@ -511,8 +613,17 @@ export default function App() {
           aspect={aspect}
           fit={fit}
           projectName={projectPath ? projectName : null}
+          onQueue={enqueue}
           onClose={() => setExporting(false)}
         />
+      )}
+      {welcome && <Welcome aspect={aspect} version={version} onDone={finishWelcome} />}
+      {update && (
+        <div className="update-banner">
+          <span>A versão <strong>{update.version}</strong> do Kortin está pronta.</span>
+          <button className="btn ghost sm" onClick={() => setUpdate(null)}>Depois</button>
+          <button className="btn primary sm" onClick={() => window.kortin.installUpdate()}>Reiniciar e atualizar</button>
+        </div>
       )}
     </div>
   );

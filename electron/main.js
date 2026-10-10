@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Readable } = require('stream');
@@ -8,7 +8,7 @@ const engine = require('./engine');
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'media',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true },
   },
 ]);
 
@@ -79,13 +79,19 @@ function registerMediaProtocol() {
             'Content-Length': String(end - start + 1),
             'Content-Range': `bytes ${start}-${end}/${size}`,
             'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
           },
         });
       }
 
       return new Response(Readable.toWeb(fs.createReadStream(filePath)), {
         status: 200,
-        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' },
+        headers: {
+          'Content-Type': type,
+          'Content-Length': String(size),
+          'Accept-Ranges': 'bytes',
+          'Access-Control-Allow-Origin': '*',
+        },
       });
     } catch (err) {
       return new Response(String(err.message || err), { status: 500 });
@@ -122,6 +128,19 @@ function createWindow() {
 
   // Aviso ao fechar com alterações não salvas
   mainWindow.on('close', (e) => {
+    if (currentExport) {
+      const stop = dialog.showMessageBoxSync(mainWindow, {
+        type: 'warning',
+        buttons: ['Continuar exportando', 'Cancelar e sair'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Exportação em andamento',
+        message: 'Um vídeo ainda está sendo exportado.',
+        detail: 'Se sair agora, a exportação é cancelada.',
+      });
+      if (stop === 0) return e.preventDefault();
+      currentExport.cancel();
+    }
     if (!isDirty) {
       try { fs.unlinkSync(autosavePath()); } catch {}
       return;
@@ -167,6 +186,11 @@ ipcMain.handle('media:probe', async (_e, filePath) => {
   const thumb = await engine.thumbnail(filePath, Math.min(1, info.duration / 2));
   allowedFiles.add(filePath);
   return { ...info, path: filePath, name: path.basename(filePath), thumb };
+});
+
+ipcMain.handle('media:peaks', async (_e, filePath) => {
+  if (!allowedFiles.has(filePath)) return [];
+  return engine.audioPeaks(filePath, 50);
 });
 
 // ---------- Projetos ----------
@@ -253,25 +277,52 @@ ipcMain.handle('dialog:saveExport', async (_e, suggestedName) => {
   return res.canceled ? null : res.filePath;
 });
 
+ipcMain.handle('dialog:chooseFolder', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Escolha a pasta para salvar os vídeos',
+    defaultPath: app.getPath('videos'),
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return res.canceled ? null : res.filePaths[0];
+});
+
+ipcMain.handle('path:join', (_e, dir, name) => path.join(dir, name));
+
+ipcMain.handle('export:hardware', () => engine.detectHardwareEncoders());
+
 ipcMain.handle('export:start', async (event, job) => {
   if (currentExport) throw new Error('Já existe uma exportação em andamento.');
   for (const c of job.clips) {
     if (!allowedFiles.has(c.path)) throw new Error('Arquivo não autorizado na linha do tempo.');
   }
   let last = -1;
-  currentExport = engine.exportVideo(job.clips, job.options, (p) => {
-    const pct = Math.round(p * 1000) / 10;
-    if (pct !== last) {
-      last = pct;
-      event.sender.send('export:progress', pct);
-    }
-  });
+  currentExport = engine.exportVideo(
+    job.clips,
+    job.options,
+    (p) => {
+      const pct = Math.round(p * 1000) / 10;
+      if (pct !== last) {
+        last = pct;
+        event.sender.send('export:progress', pct);
+      }
+    },
+    (encoder) => event.sender.send('export:encoder', encoder)
+  );
   try {
-    return await currentExport.promise;
+    const res = await currentExport.promise;
+    if (res.ok) notifyDone(res.output);
+    return res;
   } finally {
     currentExport = null;
   }
 });
+
+function notifyDone(output) {
+  if (!Notification.isSupported() || (mainWindow && mainWindow.isFocused())) return;
+  const n = new Notification({ title: 'Vídeo pronto', body: path.basename(output), silent: false });
+  n.on('click', () => shell.showItemInFolder(output));
+  n.show();
+}
 
 ipcMain.handle('export:cancel', () => {
   if (currentExport) currentExport.cancel();
@@ -282,11 +333,39 @@ ipcMain.handle('shell:showItem', (_e, p) => {
   if (typeof p === 'string' && fs.existsSync(p)) shell.showItemInFolder(p);
 });
 
+// ---------- Atualização automática (pelo GitHub Releases) ----------
+
+let updater = null;
+
+function setupUpdates() {
+  // Só no app instalado: a versão portátil e o modo desenvolvimento não se atualizam sozinhos
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_DIR) return;
+  try {
+    ({ autoUpdater: updater } = require('electron-updater'));
+  } catch {
+    return;
+  }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.on('update-downloaded', (info) => {
+    mainWindow?.webContents.send('update:ready', { version: info.version });
+  });
+  updater.on('error', () => {}); // sem internet ou sem versão nova: segue a vida
+  updater.checkForUpdates().catch(() => {});
+}
+
+ipcMain.handle('update:install', () => {
+  if (updater) updater.quitAndInstall();
+});
+
+ipcMain.handle('app:version', () => app.getVersion());
+
 // ---------- Ciclo de vida ----------
 
 app.whenReady().then(() => {
   registerMediaProtocol();
   createWindow();
+  setupUpdates();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

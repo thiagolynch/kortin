@@ -78,6 +78,12 @@ export const Icon = {
   File: (p) => (
     <svg {...base} {...p}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M12 12v6M9 15h6" /></svg>
   ),
+  Magnet: (p) => (
+    <svg {...base} {...p}><path d="M6 3v8a6 6 0 0 0 12 0V3" /><path d="M6 3h4v8a2 2 0 0 0 4 0V3h4" /><path d="M6 7h4M14 7h4" /></svg>
+  ),
+  Help: (p) => (
+    <svg {...base} {...p}><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h.01" /></svg>
+  ),
   Mute: (p) => (
     <svg {...base} {...p}><path d="M11 5 6 9H2v6h4l5 4z" /><path d="m23 9-6 6M17 9l6 6" /></svg>
   ),

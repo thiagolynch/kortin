@@ -36,11 +36,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Kortin-Windows
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/*.yml
+            release/*.blockmap
 
       - name: Publicar na página de Releases
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.exe
+          # latest.yml e .blockmap permitem que o app instalado se atualize sozinho
+          files: |
+            release/*.exe
+            release/latest.yml
+            release/*.blockmap
           generate_release_notes: true
