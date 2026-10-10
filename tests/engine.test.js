@@ -146,6 +146,37 @@ function check(cond, msg) {
   const r = await job.promise;
   check(r.cancelled && !fs.existsSync(cancelOut), 'Cancelamento da exportação');
 
+  // Muitos clipes: o grafo passa de 32 mil caracteres e precisa ir por arquivo (limite do Windows)
+  const many = Array.from({ length: 160 }, (_, i) => ({
+    path: horizontal, inPoint: (i % 50) * 0.1, outPoint: (i % 50) * 0.1 + 0.2, hasAudio: true,
+    volume: 1, speed: [1, 2, 0.5, 4][i % 4], fadeIn: 0, fadeOut: 0, denoise: false,
+  }));
+  const manyOut = path.join(tmp, 'muitos-clipes.mp4');
+  const manyRes = await engine.exportVideo(many, { width: 540, height: 960, fit: 'cover', crf: 35, preset: 'ultrafast', output: manyOut }).promise;
+  const manyInfo = manyRes.ok ? await engine.probe(manyOut) : null;
+  const manyExpected = many.reduce((n, c) => n + (c.outPoint - c.inPoint) / c.speed, 0);
+  check(manyInfo && manyRes.parts > 1 && Math.abs(manyInfo.duration - manyExpected) < 0.05, `160 clipes em ${manyRes.parts} partes: ${manyInfo?.duration.toFixed(2)}s (esperado ${manyExpected.toFixed(2)}s)`);
+
+  // Clipe minúsculo acelerado: 0,1 s a 4x = 0,025 s (menos que 1 quadro)
+  const tinyOut = path.join(tmp, 'minusculo.mp4');
+  const tinyRes = await engine.exportVideo(
+    [{ path: horizontal, inPoint: 1, outPoint: 1.1, hasAudio: true, volume: 1, speed: 4 }, { path: vertical, inPoint: 0, outPoint: 1, hasAudio: false, volume: 1, speed: 1 }],
+    { width: 1080, height: 1080, fit: 'contain', crf: 30, preset: 'ultrafast', output: tinyOut }
+  ).promise;
+  check(tinyRes.ok && fs.existsSync(tinyOut), 'Clipe de 0,1 s a 4x exporta sem erro');
+
+  // Pasta e arquivo com acentos e emoji (usuário "João" no Windows)
+  const uniDir = path.join(tmp, 'Vídeos do João 🎬');
+  fs.mkdirSync(uniDir, { recursive: true });
+  const uniIn = path.join(uniDir, 'ação.mp4');
+  fs.copyFileSync(horizontal, uniIn);
+  const uniOut = path.join(uniDir, 'saída final.mp4');
+  const uniRes = await engine.exportVideo([{ path: uniIn, inPoint: 0, outPoint: 1, hasAudio: true, volume: 1, speed: 1 }], {
+    width: 1080, height: 1920, fit: 'blur', crf: 30, preset: 'ultrafast', output: uniOut,
+    captions: { cues: [{ start: 0, end: 1, words: [{ start: 0, end: 1, text: 'Olá {\\p1} çãõ' }] }], settings: { style: 'neon', size: 'm', position: 0.7 } },
+  }).promise;
+  check(uniRes.ok && fs.existsSync(uniOut) && !fs.existsSync(`${uniOut}.parcial.mp4`), 'Caminhos com acentos/emoji + legenda com caracteres de controle');
+
   if (failures) {
     console.error(`\n${failures} teste(s) falharam.`);
     process.exit(1);

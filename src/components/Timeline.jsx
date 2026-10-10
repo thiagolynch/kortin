@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { clamp, formatSpeed, formatTime, MIN_CLIP, snapPoints, snapTime, sourceTime } from '../lib/timeline';
+import { selectPlaying, selectTime, usePlayhead } from '../state/playhead';
 
 const PAD = 16; // margem esquerda da trilha (px)
 const DRAG_TYPE = 'application/x-kortin-clip';
@@ -11,6 +12,8 @@ function tickStep(zoom) {
   return steps.find((s) => s * zoom >= 80) || 600;
 }
 
+const bucketOf = (w) => Math.ceil(Math.log2(Math.max(2, w / 2)));
+
 /** Desenha a onda sonora do trecho usado do clipe (no máximo 1 ponto a cada 2px) */
 const Waveform = memo(function Waveform({ peaks, inPoint, outPoint, width, volume }) {
   const d = useMemo(() => {
@@ -19,7 +22,9 @@ const Waveform = memo(function Waveform({ peaks, inPoint, outPoint, width, volum
     const b = Math.min(peaks.length, Math.ceil(outPoint * PEAKS_PER_SECOND));
     const slice = peaks.slice(a, b);
     if (!slice.length) return null;
-    const cols = Math.max(2, Math.min(slice.length, Math.floor(width / 2)));
+    // colunas em potências de 2: o SVG estica, então o zoom só recalcula quando dobra
+    const bucket = 2 ** bucketOf(width);
+    const cols = Math.max(2, Math.min(slice.length, bucket));
     const per = slice.length / cols;
     let path = '';
     for (let i = 0; i < cols; i++) {
@@ -29,7 +34,7 @@ const Waveform = memo(function Waveform({ peaks, inPoint, outPoint, width, volum
       path += `M${i} ${50 - h}V${50 + h}`;
     }
     return { path, cols };
-  }, [peaks, inPoint, outPoint, width, volume]);
+  }, [peaks, inPoint, outPoint, bucketOf(width), volume]);
   if (!d) return null;
   return (
     <svg className="tl-wave" viewBox={`0 0 ${d.cols} 100`} preserveAspectRatio="none" aria-hidden="true">
@@ -38,9 +43,27 @@ const Waveform = memo(function Waveform({ peaks, inPoint, outPoint, width, volum
   );
 });
 
-export default function Timeline({
-  segments, total, time, zoom, setZoom, playing, selectedId, snap, peaksByPath, cues = [],
-  onSeek, onSelect, onTrimStart, onTrim, onReorder,
+/** Único pedaço da timeline que re-renderiza a cada quadro do play */
+function Playhead({ store, zoom, scrollRef }) {
+  const time = usePlayhead(store, selectTime);
+  const playing = usePlayhead(store, selectPlaying);
+  // Acompanha o cursor durante o play
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!playing || !el) return;
+    const x = PAD + time * zoom;
+    if (x > el.scrollLeft + el.clientWidth - 60 || x < el.scrollLeft) el.scrollLeft = x - 60;
+  }, [time, playing, zoom, scrollRef]);
+  return (
+    <div className="tl-playhead" style={{ transform: `translateX(${PAD + time * zoom}px)` }}>
+      <div className="tl-playhead-cap" />
+    </div>
+  );
+}
+
+function Timeline({
+  segments, total, store, zoom, setZoom, selectedId, snap, peaksByPath, cues = [],
+  onSeek, onSelect, trim, onReorder,
 }) {
   const scrollRef = useRef(null);
   const innerRef = useRef(null);
@@ -88,7 +111,8 @@ export default function Timeline({
     e.preventDefault();
     trimming.current = true;
     onSelect(seg.clip.id);
-    onTrimStart();
+    trim.start();
+    const time = store.get().time; // lido uma vez: a alça gruda no cursor parado
     const x0 = e.clientX;
     const { inPoint, outPoint, duration, id } = seg.clip;
     const speed = seg.clip.speed || 1;
@@ -101,7 +125,7 @@ export default function Timeline({
         let v = clamp(inPoint + delta, 0, outPoint - MIN_CLIP);
         if (useSnap && playheadSrc != null && Math.abs(v - playheadSrc) * (zoom / speed) < 10) v = playheadSrc;
         setSnapLine(v === playheadSrc ? time : null);
-        onTrim(id, { inPoint: v });
+        trim.move(id, { inPoint: v });
       } else {
         let v = clamp(outPoint + delta, inPoint + MIN_CLIP, duration);
         if (useSnap) {
@@ -113,12 +137,13 @@ export default function Timeline({
             setSnapLine(target);
           } else setSnapLine(null);
         }
-        onTrim(id, { outPoint: v });
+        trim.move(id, { outPoint: v });
       }
     };
     const up = () => {
       trimming.current = false;
       setSnapLine(null);
+      trim.end();
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
@@ -163,16 +188,6 @@ export default function Timeline({
     el.addEventListener('wheel', wheel, { passive: false });
     return () => el.removeEventListener('wheel', wheel);
   }, [setZoom]);
-
-  // Acompanha o cursor durante o play
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!playing || !el) return;
-    const x = PAD + time * zoom;
-    if (x > el.scrollLeft + el.clientWidth - 60 || x < el.scrollLeft) {
-      el.scrollLeft = x - 60;
-    }
-  }, [time, playing, zoom]);
 
   return (
     <div className="timeline" ref={scrollRef}>
@@ -268,10 +283,10 @@ export default function Timeline({
 
         {snapLine != null && <div className="tl-snapline" style={{ left: PAD + snapLine * zoom }} />}
 
-        <div className="tl-playhead" style={{ left: PAD + time * zoom }}>
-          <div className="tl-playhead-cap" />
-        </div>
+        <Playhead store={store} zoom={zoom} scrollRef={scrollRef} />
       </div>
     </div>
   );
 }
+
+export default memo(Timeline);

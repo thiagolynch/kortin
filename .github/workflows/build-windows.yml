@@ -60,6 +60,12 @@ jobs:
         run: |
           if [ ! -f vendor/whisper/win/fast/whisper-cli.exe ]; then npm run setup:whisper; fi
 
+      - name: Auditoria de dependências de produção (falha em vulnerabilidade alta)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Testes de unidade e propriedade (timeline, legendas, segurança, FFmpeg)
+        run: npm run test:unit
+
       - name: Testar o motor de vídeo
         run: npm run test:engine
 

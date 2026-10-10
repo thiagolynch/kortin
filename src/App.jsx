@@ -1,3 +1,7 @@
+// Composição da tela. Regras desta camada:
+//  - estado do projeto só muda por docApi (commit / begin-preview-end), então tudo tem desfazer
+//  - o cursor (playhead) não passa por aqui: quem precisa dele assina o store
+//  - efeitos colaterais (IPC, autosave, fila) ficam nos hooks
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Preview from './components/Preview';
 import Timeline from './components/Timeline';
@@ -7,16 +11,18 @@ import ExportDialog from './components/ExportDialog';
 import ExportQueue from './components/ExportQueue';
 import Welcome from './components/Welcome';
 import CaptionsPanel from './components/CaptionsPanel';
-import { DEFAULT_CAPTIONS, MAX_CHARS, deriveCues, editCue } from './lib/captions';
+import RecoveryBanner from './components/RecoveryBanner';
+import { PlayButton, Timecode } from './components/Transport';
 import { Icon, Logo } from './components/Icons';
+import { MAX_CHARS, deriveCues, editCue } from './lib/captions';
 import { usePlayer } from './lib/usePlayer';
-import {
-  ASPECTS, FITS, baseName, buildSegments, cleanError, formatTime, locate, mediaToClip,
-  restoreClips, serializeProject, splitAt, totalOf, uid,
-} from './lib/timeline';
+import { ASPECTS, FITS, baseName, buildSegments, mediaToClip, splitAt, totalOf, uid } from './lib/timeline';
+import { patchClip, useDocument } from './state/document';
+import { useMediaLibrary } from './hooks/useMediaLibrary';
+import { useProject } from './hooks/useProject';
+import { useExportQueue } from './hooks/useExportQueue';
+import { useShortcuts } from './hooks/useShortcuts';
 
-const HISTORY_LIMIT = 100;
-const AUTOSAVE_DELAY = 1500;
 const hasBridge = typeof window !== 'undefined' && !!window.kortin;
 const isProjectFile = (p) => /\.kortin$/i.test(p);
 const WELCOME_KEY = 'kortin.boasVindas';
@@ -28,445 +34,19 @@ function writeFlag(key, value) {
   try { localStorage.setItem(key, value); } catch { /* sem armazenamento: tudo bem */ }
 }
 
-function formatWhen(ms) {
-  const d = new Date(ms);
-  const sameDay = d.toDateString() === new Date().toDateString();
-  const hour = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  return sameDay ? `hoje às ${hour}` : `${d.toLocaleDateString('pt-BR')} às ${hour}`;
+function useToast() {
+  const [toast, setToast] = useState('');
+  const timer = useRef(0);
+  const notify = useCallback((msg) => {
+    setToast(msg);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setToast(''), 4000);
+  }, []);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return [toast, notify];
 }
 
 export default function App() {
-  const [media, setMedia] = useState([]);
-  const [clips, setClipsRaw] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [aspect, setAspect] = useState('9:16');
-  const [fit, setFit] = useState('blur');
-  const [zoom, setZoom] = useState(40); // pixels por segundo
-  const [busy, setBusy] = useState('');
-  const [toast, setToast] = useState('');
-  const [exporting, setExporting] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
-  const [projectPath, setProjectPath] = useState(null);
-  const [savedJson, setSavedJson] = useState(() =>
-    JSON.stringify(serializeProject({ clips: [], aspect: '9:16', fit: 'blur', captions: DEFAULT_CAPTIONS, transcripts: {} }))
-  );
-  const [recovery, setRecovery] = useState(null);
-  const [snap, setSnap] = useState(true);
-  const [peaksByPath, setPeaksByPath] = useState({});
-  const [jobs, setJobs] = useState([]);
-  const [welcome, setWelcome] = useState(() => hasBridge && !readFlag(WELCOME_KEY));
-  const [update, setUpdate] = useState(null);
-  const [version, setVersion] = useState('');
-  const [captionSettings, setCaptionSettings] = useState(DEFAULT_CAPTIONS);
-  const [transcripts, setTranscripts] = useState({});
-  const [leftTab, setLeftTab] = useState('media');
-
-  // ---------- Histórico (desfazer / refazer) ----------
-  const clipsRef = useRef(clips);
-  clipsRef.current = clips;
-  const history = useRef({ past: [], future: [] });
-  const [, forceHistory] = useState(0);
-
-  const snapshot = useCallback(() => {
-    const h = history.current;
-    h.past.push(clipsRef.current);
-    if (h.past.length > HISTORY_LIMIT) h.past.shift();
-    h.future = [];
-    forceHistory((n) => n + 1);
-  }, []);
-
-  const resetHistory = useCallback(() => {
-    history.current = { past: [], future: [] };
-    forceHistory((n) => n + 1);
-  }, []);
-
-  const commit = useCallback((next) => {
-    snapshot();
-    setClipsRaw(next);
-  }, [snapshot]);
-
-  const undo = useCallback(() => {
-    const h = history.current;
-    if (!h.past.length) return;
-    h.future.push(clipsRef.current);
-    setClipsRaw(h.past.pop());
-    forceHistory((n) => n + 1);
-  }, []);
-
-  const redo = useCallback(() => {
-    const h = history.current;
-    if (!h.future.length) return;
-    h.past.push(clipsRef.current);
-    setClipsRaw(h.future.pop());
-    forceHistory((n) => n + 1);
-  }, []);
-
-  // ---------- Linha do tempo ----------
-  const segments = useMemo(() => buildSegments(clips), [clips]);
-  const total = totalOf(segments);
-  const player = usePlayer(segments);
-
-  const selectedClip = clips.find((c) => c.id === selectedId) || null;
-  const selectedSegment = segments.find((s) => s.clip.id === selectedId) || null;
-  const currentClip = locate(segments, player.time)?.seg.clip || null;
-  const cues = useMemo(
-    () => deriveCues(segments, transcripts, { maxChars: MAX_CHARS[aspect] || 28 }),
-    [segments, transcripts, aspect]
-  );
-
-  const toastTimer = useRef(0);
-  const showToast = useCallback((msg) => {
-    setToast(msg);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), 4000);
-  }, []);
-
-  // ---------- Estado do projeto (salvo / não salvo) ----------
-  const projectData = useMemo(
-    () => serializeProject({ clips, aspect, fit, captions: captionSettings, transcripts }),
-    [clips, aspect, fit, captionSettings, transcripts]
-  );
-  const projectJson = useMemo(() => JSON.stringify(projectData), [projectData]);
-  const dirty = projectJson !== savedJson;
-  const projectName = projectPath ? baseName(projectPath) : 'Sem título';
-
-  useEffect(() => {
-    if (!hasBridge) return;
-    window.kortin.setDirty(dirty, `${dirty ? '• ' : ''}${projectName} — Kortin`);
-  }, [dirty, projectName]);
-
-  // Recuperação automática: guarda o projeto enquanto você edita
-  useEffect(() => {
-    if (!hasBridge) return;
-    if (!dirty || !clips.length) return;
-    const t = setTimeout(() => {
-      window.kortin.autosaveWrite({ ...projectData, _path: projectPath });
-    }, AUTOSAVE_DELAY);
-    return () => clearTimeout(t);
-  }, [projectJson, dirty, clips.length, projectData, projectPath]);
-
-  const confirmDiscard = useCallback(() => {
-    if (!dirty) return true;
-    return window.confirm('Você tem alterações não salvas neste projeto. Deseja descartá-las?');
-  }, [dirty]);
-
-  // ---------- Onda sonora (lida em segundo plano, sem travar a importação) ----------
-  const peaksAsked = useRef(new Set());
-  const loadPeaks = useCallback((items) => {
-    for (const m of items) {
-      if (!m.hasAudio || peaksAsked.current.has(m.path)) continue;
-      peaksAsked.current.add(m.path);
-      window.kortin.peaks(m.path)
-        .then((peaks) => setPeaksByPath((prev) => ({ ...prev, [m.path]: peaks })))
-        .catch(() => peaksAsked.current.delete(m.path));
-    }
-  }, []);
-
-  // ---------- Importação ----------
-  const probeAll = useCallback(async (paths) => {
-    const ok = [];
-    const errors = [];
-    for (let i = 0; i < paths.length; i++) {
-      setBusy(`Lendo ${i + 1} de ${paths.length}…`);
-      try {
-        ok.push(await window.kortin.probe(paths[i]));
-      } catch (err) {
-        errors.push({ path: paths[i], message: cleanError(err) });
-      }
-    }
-    setBusy('');
-    return { ok, errors };
-  }, []);
-
-  const importPaths = useCallback(async (paths) => {
-    if (!paths?.length) return;
-    const { ok, errors } = await probeAll(paths);
-    if (ok.length) {
-      setMedia((m) => [...m, ...ok.filter((a) => !m.some((x) => x.path === a.path))]);
-      loadPeaks(ok);
-      const newClips = ok.map(mediaToClip);
-      commit([...clipsRef.current, ...newClips]);
-      setSelectedId(newClips[newClips.length - 1].id);
-    }
-    if (errors.length) {
-      showToast(`Não foi possível importar: ${errors.map((e) => `${baseName(e.path)} (${e.message})`).join(' · ')}`);
-    }
-  }, [commit, loadPeaks, probeAll, showToast]);
-
-  const openImport = useCallback(async () => {
-    importPaths(await window.kortin.openVideos());
-  }, [importPaths]);
-
-  const addFromBin = useCallback((m) => {
-    const clip = mediaToClip(m);
-    commit([...clipsRef.current, clip]);
-    setSelectedId(clip.id);
-  }, [commit]);
-
-  // ---------- Projetos ----------
-  const loadProject = useCallback(async (data, path, { recovered = false } = {}) => {
-    player.pause();
-    const paths = [...new Set(data.clips.map((c) => c.path))];
-    const { ok, errors } = await probeAll(paths);
-    const infoByPath = Object.fromEntries(ok.map((i) => [i.path, i]));
-    const restored = restoreClips(data.clips, infoByPath);
-    const nextAspect = ASPECTS[data.aspect] ? data.aspect : '9:16';
-    const nextFit = FITS[data.fit] ? data.fit : 'blur';
-
-    const nextCaptions = { ...DEFAULT_CAPTIONS, ...(data.captions || {}) };
-    const nextTranscripts = data.transcripts || {};
-    setMedia(ok);
-    loadPeaks(ok);
-    setClipsRaw(restored);
-    setAspect(nextAspect);
-    setFit(nextFit);
-    setCaptionSettings(nextCaptions);
-    setTranscripts(nextTranscripts);
-    setSelectedId(restored[0]?.id || null);
-    resetHistory();
-    player.seek(0);
-
-    if (recovered) {
-      setProjectPath(data._path || null);
-      setSavedJson('');
-    } else {
-      setProjectPath(path);
-      setSavedJson(JSON.stringify(serializeProject({
-        clips: restored, aspect: nextAspect, fit: nextFit, captions: nextCaptions, transcripts: nextTranscripts,
-      })));
-    }
-
-    if (errors.length) {
-      showToast(
-        `${errors.length} vídeo(s) não foram encontrados e ficaram de fora: ${errors.map((e) => baseName(e.path)).join(', ')}`
-      );
-    } else {
-      showToast(recovered ? 'Projeto recuperado.' : `Projeto "${baseName(path)}" aberto.`);
-    }
-  }, [player, loadPeaks, probeAll, resetHistory, showToast]);
-
-  const openProject = useCallback(async (filePath) => {
-    if (!confirmDiscard()) return;
-    try {
-      const res = await window.kortin.openProject(filePath);
-      if (res) {
-        setRecovery(null);
-        await loadProject(res.data, res.path);
-      }
-    } catch (err) {
-      showToast(`Não foi possível abrir o projeto: ${cleanError(err)}`);
-    }
-  }, [confirmDiscard, loadProject, showToast]);
-
-  const saveProject = useCallback(async (saveAs = false) => {
-    try {
-      const file = await window.kortin.saveProject(projectData, projectPath, saveAs);
-      if (!file) return;
-      setProjectPath(file);
-      setSavedJson(projectJson);
-      window.kortin.autosaveClear();
-      showToast(`Projeto salvo em ${baseName(file)}.kortin`);
-    } catch (err) {
-      showToast(`Não foi possível salvar: ${cleanError(err)}`);
-    }
-  }, [projectData, projectJson, projectPath, showToast]);
-
-  const newProject = useCallback(() => {
-    if (!confirmDiscard()) return;
-    player.pause();
-    setMedia([]);
-    setClipsRaw([]);
-    setSelectedId(null);
-    setProjectPath(null);
-    resetHistory();
-    player.seek(0);
-    setCaptionSettings(DEFAULT_CAPTIONS);
-    setTranscripts({});
-    setSavedJson(JSON.stringify(serializeProject({ clips: [], aspect, fit, captions: DEFAULT_CAPTIONS, transcripts: {} })));
-    window.kortin.autosaveClear();
-  }, [aspect, confirmDiscard, fit, player, resetHistory]);
-
-  const openPaths = useCallback((paths) => {
-    const project = paths.find(isProjectFile);
-    if (project) return openProject(project);
-    return importPaths(paths);
-  }, [importPaths, openProject]);
-
-  // Ao abrir: arquivos passados pelo Windows ou projeto para recuperar
-  const started = useRef(false);
-  useEffect(() => {
-    if (!hasBridge || started.current) return;
-    started.current = true;
-    (async () => {
-      const files = await window.kortin.pendingFiles();
-      if (files.length) return openPaths(files);
-      const saved = await window.kortin.autosaveRead();
-      if (saved?.data?.clips?.length) setRecovery(saved);
-    })();
-  }, [openPaths]);
-
-  useEffect(() => (hasBridge ? window.kortin.onOpenFiles(openPaths) : undefined), [openPaths]);
-
-  // ---------- Atualizações ----------
-  useEffect(() => {
-    if (!hasBridge) return undefined;
-    window.kortin.version().then(setVersion).catch(() => {});
-    return window.kortin.onUpdateReady(setUpdate);
-  }, []);
-
-  // ---------- Fila de exportação (roda em segundo plano, um vídeo por vez) ----------
-  const runningRef = useRef(null);
-  const enqueue = useCallback((list) => {
-    setJobs((js) => [...js, ...list.map((x) => ({ ...x, id: uid(), status: 'queued', progress: 0 }))]);
-  }, []);
-
-  useEffect(() => {
-    if (!hasBridge) return undefined;
-    const offP = window.kortin.onExportProgress((p) =>
-      setJobs((js) => js.map((j) => (j.id === runningRef.current ? { ...j, progress: p } : j))));
-    const offE = window.kortin.onExportEncoder((enc) =>
-      setJobs((js) => js.map((j) => (j.id === runningRef.current ? { ...j, encoder: enc } : j))));
-    return () => { offP(); offE(); };
-  }, []);
-
-  useEffect(() => {
-    if (runningRef.current) return;
-    const next = jobs.find((j) => j.status === 'queued');
-    if (!next) return;
-    runningRef.current = next.id;
-    setJobs((js) => js.map((j) => (j.id === next.id ? { ...j, status: 'running' } : j)));
-    const patch = (fields) => setJobs((js) => js.map((j) => (j.id === next.id ? { ...j, ...fields } : j)));
-    window.kortin.startExport({ clips: next.clips, options: next.options })
-      .then((res) => {
-        if (res?.cancelled) return patch({ status: 'cancelled' });
-        patch({ status: 'done', progress: 100, encoder: res?.encoder, fellBack: res?.fellBack });
-        showToast(`Vídeo pronto: ${next.output.split(/[\\/]/).pop()}`);
-      })
-      .catch((err) => patch({ status: 'error', error: cleanError(err) }))
-      .finally(() => {
-        runningRef.current = null;
-        setJobs((js) => [...js]); // dispara o próximo da fila
-      });
-  }, [jobs, showToast]);
-
-  const cancelJob = useCallback((id) => {
-    if (id === runningRef.current) window.kortin.cancelExport();
-    else setJobs((js) => js.map((j) => (j.id === id && j.status === 'queued' ? { ...j, status: 'cancelled' } : j)));
-  }, []);
-
-  const clearJobs = useCallback(() => setJobs((js) => js.filter((j) => j.status === 'running' || j.status === 'queued')), []);
-
-  const finishWelcome = useCallback((choice, importNow) => {
-    writeFlag(WELCOME_KEY, '1');
-    setWelcome(false);
-    setAspect(choice);
-    if (importNow) window.kortin.openVideos().then((paths) => importPaths(paths));
-  }, [importPaths]);
-
-  // ---------- Edição ----------
-  const split = useCallback(() => {
-    const res = splitAt(clipsRef.current, player.time);
-    if (!res) return showToast('Posicione o cursor no meio de um clipe para dividir.');
-    commit(res.clips);
-    setSelectedId(res.newId);
-  }, [commit, player.time, showToast]);
-
-  const removeSelected = useCallback(() => {
-    if (!selectedId) return;
-    const list = clipsRef.current;
-    const idx = list.findIndex((c) => c.id === selectedId);
-    if (idx < 0) return;
-    const next = list.filter((c) => c.id !== selectedId);
-    commit(next);
-    setSelectedId(next[Math.min(idx, next.length - 1)]?.id || null);
-  }, [commit, selectedId]);
-
-  const duplicateSelected = useCallback(() => {
-    const list = clipsRef.current;
-    const idx = list.findIndex((c) => c.id === selectedId);
-    if (idx < 0) return;
-    const copy = { ...list[idx], id: uid() };
-    const next = [...list];
-    next.splice(idx + 1, 0, copy);
-    commit(next);
-    setSelectedId(copy.id);
-  }, [commit, selectedId]);
-
-  const updateClip = useCallback((id, patch, record = true) => {
-    const next = clipsRef.current.map((c) => (c.id === id ? { ...c, ...patch } : c));
-    record ? commit(next) : setClipsRaw(next);
-  }, [commit]);
-
-  const reorder = useCallback((from, to) => {
-    if (to > from) to -= 1;
-    if (to === from) return;
-    const next = [...clipsRef.current];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
-    commit(next);
-    setSelectedId(moved.id);
-  }, [commit]);
-
-  // ---------- Legendas ----------
-  const addTranscripts = useCallback((results) => {
-    setTranscripts((prev) => ({ ...prev, ...results }));
-    setCaptionSettings((s) => ({ ...s, enabled: true }));
-  }, []);
-
-  const applyCleanup = useCallback((plan, msg) => {
-    commit(plan.clips);
-    showToast(`Fala limpa: ${msg}. Ctrl+Z desfaz.`);
-  }, [commit, showToast]);
-
-  // ---------- Atalhos de teclado ----------
-  const keys = useRef({});
-  keys.current = { player, split, removeSelected, duplicateSelected, undo, redo, saveProject, openProject, newProject, setSnap };
-  useEffect(() => {
-    const onKey = (e) => {
-      if (exporting || welcome) return;
-      const k = keys.current;
-      const ctrl = e.ctrlKey || e.metaKey;
-      const key = e.key.toLowerCase();
-
-      // atalhos de arquivo funcionam em qualquer lugar
-      if (ctrl && key === 's') { e.preventDefault(); return k.saveProject(e.shiftKey); }
-      if (ctrl && key === 'o') { e.preventDefault(); return k.openProject(); }
-      if (ctrl && key === 'n') { e.preventDefault(); return k.newProject(); }
-
-      if (e.target.closest?.('input, select, textarea')) return;
-      if (e.code === 'Space') { e.preventDefault(); k.player.toggle(); }
-      else if (ctrl && key === 'z' && !e.shiftKey) { e.preventDefault(); k.undo(); }
-      else if (ctrl && (key === 'y' || (e.shiftKey && key === 'z'))) { e.preventDefault(); k.redo(); }
-      else if (ctrl && key === 'd') { e.preventDefault(); k.duplicateSelected(); }
-      else if (!ctrl && key === 'n') { e.preventDefault(); k.setSnap((v) => !v); }
-      else if (!ctrl && key === 's') { e.preventDefault(); k.split(); }
-      else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); k.removeSelected(); }
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        const step = e.shiftKey ? 1 : 1 / 30;
-        k.player.pause();
-        k.player.seek(k.player.time + (e.key === 'ArrowLeft' ? -step : step));
-      } else if (e.key === 'Home') { k.player.seek(0); }
-      else if (e.key === 'End') { k.player.seek(Infinity); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [exporting, welcome]);
-
-  // ---------- Arrastar arquivos para a janela ----------
-  const onWindowDragOver = (e) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    setDragOver(true);
-  };
-  const onWindowDrop = (e) => {
-    if (!e.dataTransfer.types.includes('Files')) return;
-    e.preventDefault();
-    setDragOver(false);
-    const paths = [...e.dataTransfer.files].map((f) => window.kortin.pathForFile(f)).filter(Boolean);
-    openPaths(paths);
-  };
-
   if (!hasBridge) {
     return (
       <div className="no-bridge">
@@ -475,8 +55,227 @@ export default function App() {
       </div>
     );
   }
+  return <Editor />;
+}
 
-  const h = history.current;
+function Editor() {
+  const docApi = useDocument();
+  const { doc, ops } = docApi;
+  const { clips, aspect, fit, captions: captionSettings, transcripts } = doc;
+  const docRef = useRef(doc);
+  docRef.current = doc;
+
+  const [selectedId, setSelectedId] = useState(null);
+  const [zoom, setZoom] = useState(40); // pixels por segundo
+  const [snap, setSnap] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [welcome, setWelcome] = useState(() => !readFlag(WELCOME_KEY));
+  const [update, setUpdate] = useState(null);
+  const [version, setVersion] = useState('');
+  const [leftTab, setLeftTab] = useState('media');
+  const [toast, notify] = useToast();
+
+  // ---------- Derivados ----------
+  const segments = useMemo(() => buildSegments(clips), [clips]);
+  const total = totalOf(segments);
+  const player = usePlayer(segments);
+  const library = useMediaLibrary();
+  const exportQueue = useExportQueue(notify);
+  const cues = useMemo(
+    () => deriveCues(segments, transcripts, { maxChars: MAX_CHARS[aspect] || 28 }),
+    [segments, transcripts, aspect]
+  );
+  const selectedClip = useMemo(() => clips.find((c) => c.id === selectedId) || null, [clips, selectedId]);
+  const selectedSegment = useMemo(() => segments.find((s) => s.clip.id === selectedId) || null, [segments, selectedId]);
+
+  const onLoaded = useCallback((next) => setSelectedId(next.clips[0]?.id || null), []);
+  const project = useProject({ docApi, library, player, notify, onLoaded });
+
+  // ---------- Importação ----------
+  const importPaths = useCallback(async (paths) => {
+    if (!paths?.length) return;
+    const { ok, errors } = await library.probeAll(paths);
+    if (ok.length) {
+      library.addMedia(ok);
+      const newClips = ok.map(mediaToClip);
+      ops.commit((d) => ({ ...d, clips: [...d.clips, ...newClips] }));
+      setSelectedId(newClips[newClips.length - 1].id);
+    }
+    if (errors.length) {
+      notify(`Não foi possível importar: ${errors.map((e) => `${baseName(e.path)} (${e.message})`).join(' · ')}`);
+    }
+  }, [ops, library, notify]);
+
+  const openImport = useCallback(async () => importPaths(await window.kortin.openVideos()), [importPaths]);
+
+  const addFromBin = useCallback((m) => {
+    const clip = mediaToClip(m);
+    ops.commit((d) => ({ ...d, clips: [...d.clips, clip] }));
+    setSelectedId(clip.id);
+  }, [ops]);
+
+  const openPaths = useCallback((paths) => {
+    const proj = paths.find(isProjectFile);
+    return proj ? project.openProject(proj) : importPaths(paths);
+  }, [importPaths, project]);
+
+  // Ao abrir: arquivos passados pelo Windows, ou projeto para recuperar
+  const openPathsRef = useRef(openPaths);
+  openPathsRef.current = openPaths;
+  const { setRecovery } = project;
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const files = await window.kortin.pendingFiles();
+      if (!alive) return;
+      if (files.length) return openPathsRef.current(files);
+      const saved = await window.kortin.autosaveRead();
+      if (alive && saved?.data?.clips?.length) setRecovery(saved);
+      return undefined;
+    })().catch(() => {});
+    const off = window.kortin.onOpenFiles((p) => openPathsRef.current(p));
+    return () => { alive = false; off(); };
+  }, [setRecovery]);
+
+  useEffect(() => {
+    window.kortin.version().then(setVersion).catch(() => {});
+    return window.kortin.onUpdateReady(setUpdate);
+  }, []);
+
+  const finishWelcome = useCallback((choice, importNow) => {
+    writeFlag(WELCOME_KEY, '1');
+    setWelcome(false);
+    // projeto vazio: trocar o formato não deve marcar "não salvo"
+    if (!docRef.current.clips.length) project.newProject({ aspect: choice, skipConfirm: true });
+    else ops.set('aspect', choice);
+    if (importNow) openImport();
+  }, [ops, openImport, project]);
+
+  // ---------- Edição ----------
+  const split = useCallback(() => {
+    const res = splitAt(docRef.current.clips, player.getTime());
+    if (!res) return notify('Posicione o cursor no meio de um clipe para dividir.');
+    ops.commit((d) => ({ ...d, clips: res.clips }));
+    setSelectedId(res.newId);
+    return undefined;
+  }, [ops, notify, player]);
+
+  const removeSelected = useCallback(() => {
+    const list = docRef.current.clips;
+    const idx = list.findIndex((c) => c.id === selectedId);
+    if (idx < 0) return;
+    const next = list.filter((c) => c.id !== selectedId);
+    ops.commit((d) => ({ ...d, clips: next }));
+    setSelectedId(next[Math.min(idx, next.length - 1)]?.id || null);
+  }, [ops, selectedId]);
+
+  const duplicateSelected = useCallback(() => {
+    const list = docRef.current.clips;
+    const idx = list.findIndex((c) => c.id === selectedId);
+    if (idx < 0) return;
+    const copy = { ...list[idx], id: uid() };
+    ops.commit((d) => {
+      const next = [...d.clips];
+      next.splice(idx + 1, 0, copy);
+      return { ...d, clips: next };
+    });
+    setSelectedId(copy.id);
+  }, [ops, selectedId]);
+
+  const reorder = useCallback((from, to) => {
+    const target = to > from ? to - 1 : to;
+    if (target === from) return;
+    const moved = docRef.current.clips[from];
+    ops.commit((d) => {
+      const next = [...d.clips];
+      next.splice(from, 1);
+      next.splice(target, 0, moved);
+      return { ...d, clips: next };
+    });
+    setSelectedId(moved.id);
+  }, [ops]);
+
+  // Inspector: mudanças discretas viram 1 passo; sliders usam transação (1 passo no fim)
+  const clipEdit = useMemo(() => ({
+    commit: (patch) => selectedId && ops.commit(patchClip(selectedId, patch)),
+    preview: (patch) => {
+      if (!selectedId) return;
+      ops.begin();
+      ops.preview(patchClip(selectedId, patch));
+    },
+    end: ops.end,
+  }), [ops, selectedId]);
+
+  const resetClip = useCallback(() => {
+    if (!selectedClip) return;
+    clipEdit.commit({
+      inPoint: 0, outPoint: selectedClip.duration, speed: 1, volume: 1, fadeIn: 0, fadeOut: 0, denoise: false,
+    });
+  }, [clipEdit, selectedClip]);
+
+  // Timeline: arrastar alça = transação
+  const trim = useMemo(() => ({
+    start: ops.begin,
+    move: (id, patch) => ops.preview(patchClip(id, patch)),
+    end: ops.end,
+  }), [ops]);
+
+  // ---------- Legendas ----------
+  const captionsApi = useMemo(() => ({
+    settings: (patch) => ops.commit((d) => ({ ...d, captions: { ...d.captions, ...patch } })),
+    previewSettings: (patch) => {
+      ops.begin();
+      ops.preview((d) => ({ ...d, captions: { ...d.captions, ...patch } }));
+    },
+    end: ops.end,
+    addTranscripts: (results) => ops.commit((d) => ({
+      ...d,
+      transcripts: { ...d.transcripts, ...results },
+      captions: { ...d.captions, enabled: true },
+    })),
+    editCue: (cue, text) => ops.commit((d) => ({ ...d, transcripts: editCue(d.transcripts, cue, text) })),
+  }), [ops]);
+
+  const applyCleanup = useCallback((plan, msg) => {
+    ops.commit((d) => ({ ...d, clips: plan.clips }));
+    notify(`Fala limpa: ${msg}. Ctrl+Z desfaz.`);
+  }, [ops, notify]);
+
+  const seekPaused = useCallback((t) => { player.pause(); player.seek(t); }, [player]);
+
+  // ---------- Atalhos ----------
+  useShortcuts({
+    save: project.saveProject,
+    open: () => project.openProject(),
+    newProject: () => project.newProject(),
+    togglePlay: player.toggle,
+    undo: ops.undo,
+    redo: ops.redo,
+    duplicate: duplicateSelected,
+    toggleSnap: () => setSnap((v) => !v),
+    split,
+    remove: removeSelected,
+    step: (delta) => { player.pause(); player.seek(player.getTime() + delta); },
+    seek: player.seek,
+  }, !exporting && !welcome);
+
+  // ---------- Arrastar arquivos para a janela ----------
+  const onWindowDragOver = (e) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDragOver(true);
+  };
+  const onWindowDrop = async (e) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = [...e.dataTransfer.files].map((f) => window.kortin.pathForFile(f)).filter(Boolean);
+    // o processo principal só libera arquivos locais de vídeo/projeto que existem
+    const accepted = await window.kortin.authorizeFiles(dropped);
+    if (accepted.length < dropped.length) notify(`${dropped.length - accepted.length} arquivo(s) ignorado(s): formato não suportado ou pasta de rede.`);
+    if (accepted.length) openPaths(accepted);
+  };
 
   return (
     <div
@@ -492,32 +291,32 @@ export default function App() {
             <span>Kortin</span>
           </div>
           <span className="divider" />
-          <div className="project-name" title={projectPath || 'Projeto ainda não salvo'}>
-            {projectName}
-            {dirty && <span className="dirty-dot" title="Alterações não salvas" />}
+          <div className="project-name" title={project.projectPath || 'Projeto ainda não salvo'}>
+            {project.projectName}
+            {project.dirty && <span className="dirty-dot" title="Alterações não salvas" />}
           </div>
           <div className="file-actions">
-            <button className="icon-btn" onClick={newProject} title="Novo projeto (Ctrl+N)"><Icon.File /></button>
-            <button className="icon-btn" onClick={() => openProject()} title="Abrir projeto (Ctrl+O)"><Icon.Open /></button>
-            <button className="icon-btn" onClick={() => saveProject(false)} title="Salvar projeto (Ctrl+S)"><Icon.Save /></button>
+            <button className="icon-btn" onClick={() => project.newProject()} title="Novo projeto (Ctrl+N)"><Icon.File /></button>
+            <button className="icon-btn" onClick={() => project.openProject()} title="Abrir projeto (Ctrl+O)"><Icon.Open /></button>
+            <button className="icon-btn" onClick={() => project.saveProject(false)} title="Salvar projeto (Ctrl+S)"><Icon.Save /></button>
           </div>
         </div>
 
         <div className="topbar-center">
           <div className="segmented compact" role="group" aria-label="Formato">
             {Object.entries(ASPECTS).map(([k, a]) => (
-              <button key={k} className={aspect === k ? 'active' : ''} onClick={() => setAspect(k)} title={a.hint}>
+              <button key={k} className={aspect === k ? 'active' : ''} onClick={() => ops.set('aspect', k)} title={a.hint}>
                 {a.label}
               </button>
             ))}
           </div>
-          <select className="select" value={fit} onChange={(e) => setFit(e.target.value)} title="Como o vídeo ocupa o quadro">
+          <select className="select" value={fit} onChange={(e) => ops.set('fit', e.target.value)} title="Como o vídeo ocupa o quadro">
             {Object.entries(FITS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
         </div>
 
         <div className="topbar-right">
-          <ExportQueue jobs={jobs} onCancel={cancelJob} onShow={(p) => window.kortin.showInFolder(p)} onClear={clearJobs} />
+          <ExportQueue jobs={exportQueue.jobs} onCancel={exportQueue.cancel} onShow={(p) => window.kortin.showInFolder(p)} onClear={exportQueue.clear} />
           <button className="icon-btn" onClick={() => setWelcome(true)} title="Boas-vindas e atalhos"><Icon.Help /></button>
           <button className="btn ghost ai-soon" disabled title="Chega no módulo 3">
             <Icon.Sparkles width={15} height={15} /> Corte com IA <small>em breve</small>
@@ -539,49 +338,31 @@ export default function App() {
             </button>
           </div>
           {leftTab === 'media' ? (
-            <MediaBin media={media} busy={busy} onImport={openImport} onAdd={addFromBin} />
+            <MediaBin media={library.media} busy={library.busy} onImport={openImport} onAdd={addFromBin} />
           ) : (
             <CaptionsPanel
               clips={clips}
               cues={cues}
               transcripts={transcripts}
               settings={captionSettings}
-              time={player.time}
-              onSettings={(patch) => setCaptionSettings((s) => ({ ...s, ...patch }))}
-              onTranscripts={addTranscripts}
-              onCueEdit={(cue, text) => setTranscripts((t) => editCue(t, cue, text))}
-              onSeek={(t) => { player.pause(); player.seek(t); }}
+              store={player.store}
+              api={captionsApi}
+              onSeek={seekPaused}
               onApplyCleanup={applyCleanup}
-              notify={showToast}
+              notify={notify}
             />
           )}
         </aside>
         <div className="stage">
-          {recovery && (
-            <div className="recovery">
-              <div>
-                <strong>Encontramos um projeto não salvo</strong>
-                <span>
-                  {recovery.data._path ? `"${baseName(recovery.data._path)}", ` : ''}
-                  {recovery.data.clips.length} clipe(s), editado {formatWhen(recovery.savedAt)}
-                </span>
-              </div>
-              <button className="btn ghost sm" onClick={() => { setRecovery(null); window.kortin.autosaveClear(); }}>
-                Descartar
-              </button>
-              <button className="btn primary sm" onClick={() => { const r = recovery; setRecovery(null); loadProject(r.data, null, { recovered: true }); }}>
-                Recuperar
-              </button>
-            </div>
-          )}
+          <RecoveryBanner recovery={project.recovery} onRecover={project.recover} onDiscard={project.discardRecovery} />
           <Preview
             player={player}
+            segments={segments}
             aspect={aspect}
             fit={fit}
-            currentClip={currentClip}
             empty={!clips.length}
             onImport={openImport}
-            onOpenProject={() => openProject()}
+            onOpenProject={() => project.openProject()}
             cues={cues}
             captionSettings={captionSettings}
           />
@@ -589,29 +370,24 @@ export default function App() {
         <Inspector
           clip={selectedClip}
           segment={selectedSegment}
-          time={player.time}
-          onSetIn={(t) => updateClip(selectedId, { inPoint: t })}
-          onSetOut={(t) => updateClip(selectedId, { outPoint: t })}
+          store={player.store}
+          edit={clipEdit}
           onSplit={split}
           onDuplicate={duplicateSelected}
           onDelete={removeSelected}
-          onReset={() => updateClip(selectedId, {
-            inPoint: 0, outPoint: selectedClip.duration, speed: 1, volume: 1, fadeIn: 0, fadeOut: 0,
-          })}
-          onChangeStart={snapshot}
-          onChange={(patch) => updateClip(selectedId, patch, false)}
+          onReset={resetClip}
         />
       </main>
 
       <section className="editor-bottom">
         <div className="toolbar">
           <div className="toolbar-group">
-            <button className="icon-btn" onClick={undo} disabled={!h.past.length} title="Desfazer (Ctrl+Z)"><Icon.Undo /></button>
-            <button className="icon-btn" onClick={redo} disabled={!h.future.length} title="Refazer (Ctrl+Y)"><Icon.Redo /></button>
+            <button className="icon-btn" onClick={ops.undo} disabled={!docApi.canUndo} title="Desfazer (Ctrl+Z)"><Icon.Undo /></button>
+            <button className="icon-btn" onClick={ops.redo} disabled={!docApi.canRedo} title="Refazer (Ctrl+Y)"><Icon.Redo /></button>
             <span className="divider" />
             <button className="icon-btn" onClick={split} disabled={!clips.length} title="Dividir no cursor (S)"><Icon.Split /></button>
-            <button className="icon-btn" onClick={duplicateSelected} disabled={!selectedId} title="Duplicar clipe (Ctrl+D)"><Icon.Copy /></button>
-            <button className="icon-btn" onClick={removeSelected} disabled={!selectedId} title="Excluir clipe (Delete)"><Icon.Trash /></button>
+            <button className="icon-btn" onClick={duplicateSelected} disabled={!selectedClip} title="Duplicar clipe (Ctrl+D)"><Icon.Copy /></button>
+            <button className="icon-btn" onClick={removeSelected} disabled={!selectedClip} title="Excluir clipe (Delete)"><Icon.Trash /></button>
             <span className="divider" />
             <button
               className={`icon-btn toggle${snap ? ' on' : ''}`}
@@ -624,59 +400,46 @@ export default function App() {
           </div>
 
           <div className="toolbar-group center">
-            <button className="play-btn" onClick={player.toggle} disabled={!clips.length} title="Play / pausa (Espaço)">
-              {player.playing ? <Icon.Pause /> : <Icon.Play />}
-            </button>
-            <span className="timecode">
-              <strong>{formatTime(player.time)}</strong> / {formatTime(total)}
-            </span>
+            <PlayButton store={player.store} onToggle={player.toggle} disabled={!clips.length} />
+            <Timecode store={player.store} total={total} />
           </div>
 
           <div className="toolbar-group right">
             <span className="zoom-label">Zoom</span>
-            <input
-              type="range"
-              min={4}
-              max={400}
-              step={1}
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-            />
+            <input type="range" min={4} max={400} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
           </div>
         </div>
 
         <Timeline
           segments={segments}
           total={total}
-          time={player.time}
+          store={player.store}
           zoom={zoom}
           setZoom={setZoom}
-          playing={player.playing}
           selectedId={selectedId}
           snap={snap}
-          peaksByPath={peaksByPath}
+          peaksByPath={library.peaksByPath}
           cues={captionSettings.enabled ? cues : []}
           onSeek={player.seek}
           onSelect={setSelectedId}
-          onTrimStart={snapshot}
-          onTrim={(id, patch) => updateClip(id, patch, false)}
+          trim={trim}
           onReorder={reorder}
         />
       </section>
 
       {dragOver && <div className="drop-overlay"><div>Solte para importar</div></div>}
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast" role="status">{toast}</div>}
       {exporting && (
         <ExportDialog
           clips={clips}
           total={total}
           aspect={aspect}
           fit={fit}
-          projectName={projectPath ? projectName : null}
+          projectName={project.projectPath ? project.projectName : null}
           segments={segments}
           transcripts={transcripts}
           captionSettings={captionSettings}
-          onQueue={enqueue}
+          onQueue={exportQueue.enqueue}
           onClose={() => setExporting(false)}
         />
       )}

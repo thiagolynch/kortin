@@ -1,9 +1,15 @@
-export const ASPECTS = {
-  '9:16': { width: 1080, height: 1920, label: '9:16', hint: 'Reels · TikTok · Shorts' },
-  '16:9': { width: 1920, height: 1080, label: '16:9', hint: 'YouTube' },
-  '1:1': { width: 1080, height: 1080, label: '1:1', hint: 'Feed quadrado' },
-  '4:5': { width: 1080, height: 1350, label: '4:5', hint: 'Feed Instagram' },
+import C from '../../shared/constants.json';
+
+// Medidas vêm de shared/constants.json (as mesmas que o processo principal valida)
+const ASPECT_LABELS = {
+  '9:16': 'Reels · TikTok · Shorts',
+  '16:9': 'YouTube',
+  '1:1': 'Feed quadrado',
+  '4:5': 'Feed Instagram',
 };
+export const ASPECTS = Object.fromEntries(
+  Object.entries(C.ASPECTS).map(([k, a]) => [k, { ...a, label: k, hint: ASPECT_LABELS[k] }])
+);
 
 export const FITS = {
   blur: 'Fundo desfocado',
@@ -17,17 +23,14 @@ export const QUALITIES = {
   leve: { label: 'Leve', crf: 26, preset: 'veryfast', hint: 'Envio rápido' },
 };
 
-export const MIN_CLIP = 0.1;
-
-export const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
-export const MAX_VOLUME = 2; // 200%
-export const MAX_FADE = 3; // segundos
+export const { MIN_CLIP, SPEEDS, MAX_VOLUME, MAX_FADE, PROJECT_VERSION } = C;
 export const SNAP_PX = 10; // distância em pixels para o ímã puxar
 
 /** Duração do clipe na linha do tempo, já com a velocidade aplicada */
 export const clipLength = (c) => (c.outPoint - c.inPoint) / (c.speed || 1);
 
-export const uid = () => Math.random().toString(36).slice(2, 10);
+export const uid = () =>
+  (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`).slice(0, 13);
 
 export const mediaUrl = (p) => `media://file/${encodeURIComponent(p)}`;
 
@@ -51,15 +54,18 @@ export function totalOf(segments) {
 
 export function locate(segments, t) {
   if (!segments.length) return null;
-  let index = segments.length - 1;
-  for (let i = 0; i < segments.length; i++) {
-    if (t < segments[i].start + segments[i].len) {
-      index = i;
-      break;
-    }
+  // busca binária: primeiro segmento cujo fim passa de t (O(log n) — chamada a cada quadro)
+  let lo = 0;
+  let hi = segments.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (t < segments.at(mid).start + segments.at(mid).len) hi = mid;
+    else lo = mid + 1;
   }
+  const index = lo;
   const seg = segments[index];
-  const local = clamp(sourceTime(seg, t), seg.clip.inPoint, seg.clip.outPoint - 0.001);
+  const { inPoint, outPoint } = seg.clip;
+  const local = clamp(sourceTime(seg, t), inPoint, Math.max(inPoint, outPoint - 0.001));
   return { index, seg, local };
 }
 
@@ -144,7 +150,6 @@ export function mediaToClip(m) {
   };
 }
 
-export const PROJECT_VERSION = 3;
 
 /** Converte o estado do editor no conteúdo do arquivo .kortin */
 export function serializeProject({ clips, aspect, fit, captions, transcripts }) {

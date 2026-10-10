@@ -66,6 +66,10 @@ async function shot(win, name) {
 app.whenReady().then(async () => {
   await wait(4500);
   const win = BrowserWindow.getAllWindows()[0];
+  win.webContents.on('console-message', (e) => {
+    const { level, message } = e;
+    if (level === 'error' || level === 3) console.log('[renderer]', message);
+  });
   const js = (code) => win.webContents.executeJavaScript(`(async () => { const wait = (ms) => new Promise(r => setTimeout(r, ms)); ${code} })()`);
   const click = (selector, text) => js(`
     const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find(b => ${text ? `b.textContent.includes(${JSON.stringify(text)})` : 'true'});
@@ -92,7 +96,9 @@ app.whenReady().then(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
       const ranges = document.querySelectorAll('.inspector input[type=range]');
       setter.call(ranges[0], '150'); ranges[0].dispatchEvent(new Event('input', { bubbles: true }));
+      ranges[0].dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       setter.call(ranges[1], '1');   ranges[1].dispatchEvent(new Event('input', { bubbles: true }));
+      ranges[1].dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       await wait(400);
       const v = document.querySelector('.frame-video');
       return {
@@ -106,6 +112,24 @@ app.whenReady().then(async () => {
       };
     `);
     console.log('resultado:', JSON.stringify(result));
+    // desfazer: o arrasto do slider de volume é UM passo só (transação)
+    const undo = await js(`
+      const before = document.querySelector('.insp-control-head span').textContent;
+      setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      const vol = document.querySelectorAll('.inspector input[type=range]')[0];
+      for (const v of ['120', '130', '140']) { setter.call(vol, v); vol.dispatchEvent(new Event('input', { bubbles: true })); await wait(30); }
+      vol.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      await wait(100);
+      const dragged = document.querySelector('.insp-control-head span').textContent;
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+      await wait(200);
+      const undone = document.querySelector('.insp-control-head span').textContent;
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', ctrlKey: true, bubbles: true }));
+      await wait(200);
+      return { before, dragged, undone, redone: document.querySelector('.insp-control-head span').textContent,
+               dirty: !!document.querySelector('.dirty-dot') };
+    `.replace('setter =', 'const setter ='));
+    console.log('desfazer:', JSON.stringify(undo));
     await shot(win, 'kortin-editor-v02');
 
     // Exportar dois formatos de uma vez, em segundo plano

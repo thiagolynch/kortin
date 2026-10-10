@@ -45,40 +45,60 @@ export function deriveCues(segments, transcripts, { maxChars = 28, maxDur = 3.5,
   const cues = [];
   for (const seg of segments) {
     const c = seg.clip;
-    const tr = transcripts?.[c.path];
-    if (!tr?.words?.length) continue;
+    const words = transcripts?.[c.path]?.words;
+    if (!words?.length) continue;
     const speed = c.speed || 1;
     const toTimeline = (s) => seg.start + (s - c.inPoint) / speed;
     let cur = null;
+    let chars = 0;
     const flush = () => {
       if (cur?.words.length) cues.push(cur);
       cur = null;
+      chars = 0;
     };
-    tr.words.forEach((w, idx) => {
-      if (w.e <= c.inPoint || w.s >= c.outPoint) return;
+    const open = (word) => {
+      cur = { id: `${c.id}:${word.idx}`, start: word.start, end: word.end, words: [word] };
+      chars = word.text.length;
+    };
+    // busca binária da primeira palavra que termina depois do início do clipe:
+    // O(log W + palavras do trecho), em vez de percorrer a transcrição inteira por clipe
+    for (let idx = firstWordEndingAfter(words, c.inPoint); idx < words.length; idx++) {
+      const w = words[idx];
+      if (w.s >= c.outPoint) break;
+      if (w.e <= c.inPoint) continue;
       const start = toTimeline(Math.max(w.s, c.inPoint));
       const end = toTimeline(Math.min(w.e, c.outPoint));
-      if (end - start < 0.02) return;
+      if (end - start < 0.02) continue;
       const word = { start, end, text: w.w, path: c.path, idx };
-      if (cur) {
-        const prev = cur.words[cur.words.length - 1];
-        const chars = cur.words.reduce((n, x) => n + x.text.length + 1, 0) + w.w.length;
-        const sentenceEnd = /[.!?…]$/.test(prev.text);
-        if (chars > maxChars || start - prev.end > gap || end - cur.start > maxDur || sentenceEnd) {
-          // não termina a legenda com palavra solta ("o", "de", "um"): ela passa para a próxima
-          let carry = null;
-          if (!sentenceEnd && cur.words.length > 1 && prev.text.length <= 3 && !/[,;:]$/.test(prev.text)) {
-            carry = cur.words.pop();
-            cur.end = cur.words[cur.words.length - 1].end;
-          }
-          flush();
-          if (carry) cur = { id: `${c.id}:${carry.idx}`, start: carry.start, end: carry.end, words: [carry] };
-        }
+      if (!cur) {
+        open(word);
+        continue;
       }
-      if (!cur) cur = { id: `${c.id}:${idx}`, start, end, words: [] };
+      const prev = cur.words[cur.words.length - 1];
+      const sentenceEnd = /[.!?…]$/.test(prev.text);
+      const tooLong = chars + 1 + w.w.length > maxChars;
+      if (tooLong || start - prev.end > gap || end - cur.start > maxDur || sentenceEnd) {
+        // não termina a legenda com palavra solta ("o", "de", "um"): ela passa para a próxima
+        let carry = null;
+        if (!sentenceEnd && cur.words.length > 1 && prev.text.length <= 3 && !/[,;:]$/.test(prev.text)) {
+          carry = cur.words.pop();
+          cur.end = cur.words[cur.words.length - 1].end;
+        }
+        flush();
+        if (carry) {
+          open(carry);
+          cur.words.push(word);
+          cur.end = word.end;
+          chars += 1 + word.text.length;
+        } else {
+          open(word);
+        }
+        continue;
+      }
       cur.words.push(word);
       cur.end = end;
-    });
+      chars += 1 + w.w.length;
+    }
     flush();
   }
   // a legenda fica na tela até a próxima começar (sem piscar em pausas curtas)
@@ -89,12 +109,24 @@ export function deriveCues(segments, transcripts, { maxChars = 28, maxDur = 3.5,
   return cues;
 }
 
+/** Índice da primeira palavra com fim > t (palavras em ordem de tempo). */
+export function firstWordEndingAfter(words, t) {
+  let lo = 0;
+  let hi = words.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (words[mid].e <= t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 export function cueText(cue) {
   return cue.words.map((w) => w.text).join(' ');
 }
 
-export function cueAt(cues, t) {
-  // busca binária: muitas legendas em vídeos longos
+/** Índice da legenda que cobre o tempo t, ou -1 (busca binária: vídeos longos têm milhares) */
+export function cueIndexAt(cues, t) {
   let lo = 0;
   let hi = cues.length - 1;
   while (lo <= hi) {
@@ -102,9 +134,14 @@ export function cueAt(cues, t) {
     const c = cues.at(mid);
     if (t < c.start) hi = mid - 1;
     else if (t >= c.end) lo = mid + 1;
-    else return c;
+    else return mid;
   }
-  return null;
+  return -1;
+}
+
+export function cueAt(cues, t) {
+  const i = cueIndexAt(cues, t);
+  return i < 0 ? null : cues.at(i);
 }
 
 /**
