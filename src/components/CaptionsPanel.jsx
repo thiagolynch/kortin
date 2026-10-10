@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CAPTION_STYLES, FILLERS, LANGUAGES, cueText, planCleanup } from '../lib/captions';
+import { CAPTION_STYLES, FILLERS, LANGUAGES, cueAt, cueText, planCleanup } from '../lib/captions';
+import { useDerivedPlayhead } from '../state/playhead';
 import { cleanError, formatTime } from '../lib/timeline';
 import { Icon } from './Icons';
 
@@ -7,8 +8,11 @@ import { Icon } from './Icons';
  * Painel de legendas: gerar (IA no PC), estilo, limpeza da fala e edição do texto.
  */
 export default function CaptionsPanel({
-  clips, cues, transcripts, settings, time, onSettings, onTranscripts, onCueEdit, onSeek, onApplyCleanup, notify,
+  clips, cues, transcripts, settings, store, api, onSeek, onApplyCleanup, notify,
 }) {
+  const onSettings = api.settings;
+  // legenda ativa: busca binária, e só re-renderiza quando a legenda muda (não a cada quadro)
+  const activeId = useDerivedPlayhead(store, (t) => cueAt(cues, t)?.id ?? null, [cues]);
   const [status, setStatus] = useState(null); // { available, models }
   const [download, setDownload] = useState(null); // { key, p }
   const [job, setJob] = useState(null); // { index, total, name, p }
@@ -51,7 +55,7 @@ export default function CaptionsPanel({
         results[p] = res;
       }
       if (Object.keys(results).length) {
-        onTranscripts(results);
+        api.addTranscripts(results);
         const words = Object.values(results).reduce((n, r) => n + r.words.length, 0);
         notify(words ? `Legenda gerada: ${words} palavras.` : 'Não encontrei fala nos vídeos.');
       }
@@ -91,7 +95,6 @@ export default function CaptionsPanel({
   }
 
   const hasCaptions = cues.length > 0;
-  const activeId = cues.find((c) => time >= c.start && time < c.end)?.id;
 
   return (
     <div className="cap-body">
@@ -219,7 +222,10 @@ export default function CaptionsPanel({
               <input
                 type="range" min={10} max={90} step={1}
                 value={Math.round(settings.position * 100)}
-                onChange={(e) => onSettings({ position: Number(e.target.value) / 100 })}
+                onChange={(e) => api.previewSettings({ position: Number(e.target.value) / 100 })}
+                onPointerUp={api.end}
+                onKeyUp={api.end}
+                onBlur={api.end}
                 onKeyDown={(e) => e.stopPropagation()}
                 className="grow"
               />
@@ -283,7 +289,7 @@ export default function CaptionsPanel({
                       onBlur={(e) => {
                         const v = e.currentTarget.value;
                         setEditing(null);
-                        if (v.trim() !== cueText(c)) onCueEdit(c, v);
+                        if (v.trim() !== cueText(c)) api.editCue(c, v);
                       }}
                     />
                   ) : (

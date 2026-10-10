@@ -1,8 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
-import { ASPECTS } from '../lib/timeline';
+import { memo, useEffect, useRef, useState } from 'react';
+import { ASPECTS, locate } from '../lib/timeline';
+import { useDerivedPlayhead } from '../state/playhead';
 import CaptionOverlay from './CaptionOverlay';
 
-export default function Preview({ player, aspect, fit, currentClip, empty, onImport, onOpenProject, cues, captionSettings }) {
+/** Fundo desfocado do clipe atual: só troca quando o clipe muda */
+function BlurBackdrop({ store, segments }) {
+  const index = useDerivedPlayhead(store, (t) => locate(segments, t)?.index ?? -1, [segments]);
+  const thumb = segments[index]?.clip.thumb;
+  return thumb ? <img className="frame-blur" src={thumb} alt="" draggable={false} /> : null;
+}
+
+function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject, cues, captionSettings }) {
   const wrapRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const a = ASPECTS[aspect];
@@ -29,9 +37,7 @@ export default function Preview({ player, aspect, fit, currentClip, empty, onImp
   return (
     <div className="preview" ref={wrapRef}>
       <div className="frame" style={{ width: box.w, height: box.h }}>
-        {fit === 'blur' && currentClip?.thumb && (
-          <img className="frame-blur" src={currentClip.thumb} alt="" draggable={false} />
-        )}
+        {fit === 'blur' && <BlurBackdrop store={player.store} segments={segments} />}
         <video
           ref={player.videoRef}
           onLoadedMetadata={player.onLoadedMetadata}
@@ -40,7 +46,7 @@ export default function Preview({ player, aspect, fit, currentClip, empty, onImp
           preload="auto"
           crossOrigin="anonymous"
         />
-        <CaptionOverlay cues={cues} time={player.time} settings={captionSettings} width={box.w} height={box.h} />
+        <CaptionOverlay cues={cues} store={player.store} settings={captionSettings} width={box.w} height={box.h} />
         {empty && (
           <div className="frame-empty">
             <button className="frame-empty-main" onClick={onImport}>
@@ -60,3 +66,5 @@ export default function Preview({ player, aspect, fit, currentClip, empty, onImp
     </div>
   );
 }
+
+export default memo(Preview);

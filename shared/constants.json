@@ -1,0 +1,31 @@
+{
+  "APP_ID": "kortin",
+  "PROJECT_EXT": "kortin",
+  "PROJECT_VERSION": 4,
+  "VIDEO_EXT": ["mp4", "mov", "m4v", "mkv", "webm", "avi", "wmv", "mts", "m2ts", "3gp"],
+  "MIN_CLIP": 0.1,
+  "MAX_VOLUME": 2,
+  "MAX_FADE": 3,
+  "SPEEDS": [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4],
+  "ASPECTS": {
+    "9:16": { "width": 1080, "height": 1920 },
+    "16:9": { "width": 1920, "height": 1080 },
+    "1:1": { "width": 1080, "height": 1080 },
+    "4:5": { "width": 1080, "height": 1350 }
+  },
+  "FITS": ["blur", "cover", "contain"],
+  "FPS": [24, 25, 30, 50, 60],
+  "ENCODERS": ["libx264", "h264_nvenc", "h264_qsv", "h264_amf"],
+  "X264_PRESETS": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
+  "CAPTION_STYLES": ["classica", "destaque", "caixa", "neon"],
+  "CAPTION_SIZES": { "p": 0.8, "m": 1, "g": 1.25 },
+  "LANGUAGES": ["pt", "en", "es"],
+  "LIMITS": {
+    "maxClips": 2000,
+    "maxCues": 20000,
+    "maxWordsPerCue": 60,
+    "maxWordChars": 80,
+    "maxProjectBytes": 52428800,
+    "maxDurationSeconds": 21600
+  }
+}

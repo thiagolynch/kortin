@@ -1,21 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { clamp, fadeFactor, locate, mediaUrl, sourceTime, totalOf } from './timeline';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { clamp, fadeFactor, locate, mediaUrl, totalOf } from './timeline';
+import { createPlayheadStore } from '../state/playhead';
 
 /**
- * Toca a linha do tempo inteira num único <video>, trocando de clipe quando
- * o atual chega ao ponto de saída. Volume acima de 100% e fades passam por um
- * GainNode (Web Audio); se o navegador recusar, cai para o volume normal (até 100%).
+ * Toca a linha do tempo inteira num único <video>, trocando de clipe quando o atual chega
+ * ao ponto de saída. A posição fica num store externo (ver state/playhead.js).
+ * Volume acima de 100% e fades passam por um GainNode; se o Web Audio falhar, usa o volume
+ * do próprio vídeo (até 100%).
  */
 export function usePlayer(segments) {
   const videoRef = useRef(null);
-  const [time, setTime] = useState(0);
-  const [playing, setPlaying] = useState(false);
-
+  const store = useMemo(() => createPlayheadStore(), []);
   const segRef = useRef(segments);
   segRef.current = segments;
-  const timeRef = useRef(0);
-  timeRef.current = time;
-  const st = useRef({ index: -1, playing: false, pending: null, raf: 0 });
+  const st = useRef({ index: -1, pending: null, raf: 0 });
   const audio = useRef(null); // { ctx, gain } | false (indisponível) | null (ainda não criado)
 
   const ensureAudio = useCallback(() => {
@@ -33,7 +31,6 @@ export function usePlayer(segments) {
     return audio.current;
   }, []);
 
-  // Aplica volume + fade do clipe no instante t da linha do tempo
   const applyGain = useCallback((seg, t) => {
     const v = videoRef.current;
     if (!v || !seg) return;
@@ -41,12 +38,11 @@ export function usePlayer(segments) {
     const a = audio.current;
     if (a) {
       v.volume = 1;
-      v.muted = g === 0;
       a.gain.gain.value = g;
     } else {
       v.volume = clamp(g, 0, 1);
-      v.muted = g === 0;
     }
+    v.muted = g === 0;
   }, []);
 
   const load = useCallback((t, andPlay) => {
@@ -84,19 +80,18 @@ export function usePlayer(segments) {
     v.currentTime = p.local;
     v.playbackRate = p.rate;
     st.current.pending = null;
-    if (p.play && st.current.playing) v.play().catch(() => {});
-  }, []);
+    if (p.play && store.get().playing) v.play().catch(() => {});
+  }, [store]);
 
   const pause = useCallback(() => {
-    st.current.playing = false;
     cancelAnimationFrame(st.current.raf);
-    setPlaying(false);
+    store.set({ playing: false });
     videoRef.current?.pause();
-  }, []);
+  }, [store]);
 
   const tick = useCallback(() => {
     const s = st.current;
-    if (!s.playing) return;
+    if (!store.get().playing) return;
     const v = videoRef.current;
     const segs = segRef.current;
     const seg = segs[s.index];
@@ -105,57 +100,48 @@ export function usePlayer(segments) {
       if (ct >= seg.clip.outPoint - 0.02 || v.ended) {
         if (s.index + 1 < segs.length) {
           const next = segs[s.index + 1];
-          setTime(next.start);
+          store.set({ time: next.start });
           load(next.start, true);
         } else {
-          setTime(seg.start + seg.len);
+          store.set({ time: seg.start + seg.len });
           pause();
           return;
         }
       } else {
         const t = seg.start + Math.max(0, ct - seg.clip.inPoint) / (seg.clip.speed || 1);
-        setTime(t);
+        store.set({ time: t });
         applyGain(seg, t);
       }
     }
     s.raf = requestAnimationFrame(tick);
-  }, [applyGain, load, pause]);
+  }, [applyGain, load, pause, store]);
 
   const play = useCallback(() => {
-    const segs = segRef.current;
-    const total = totalOf(segs);
+    const total = totalOf(segRef.current);
     if (!total) return;
     const a = ensureAudio();
     if (a && a.ctx.state === 'suspended') a.ctx.resume().catch(() => {});
-    let t = timeRef.current;
+    let t = store.get().time;
     if (t >= total - 0.05) t = 0;
-    setTime(t);
-    st.current.playing = true;
-    setPlaying(true);
+    store.set({ time: t, playing: true });
     load(t, true);
     cancelAnimationFrame(st.current.raf);
     st.current.raf = requestAnimationFrame(tick);
-  }, [ensureAudio, load, tick]);
+  }, [ensureAudio, load, store, tick]);
 
-  const toggle = useCallback(() => (st.current.playing ? pause() : play()), [pause, play]);
+  const toggle = useCallback(() => (store.get().playing ? pause() : play()), [pause, play, store]);
 
-  const seek = useCallback(
-    (t) => {
-      const total = totalOf(segRef.current);
-      const nt = clamp(t, 0, total);
-      setTime(nt);
-      timeRef.current = nt;
-      load(nt, st.current.playing);
-    },
-    [load]
-  );
+  const seek = useCallback((t) => {
+    const nt = clamp(t, 0, totalOf(segRef.current));
+    store.set({ time: nt });
+    load(nt, store.get().playing);
+  }, [load, store]);
 
-  // Quando a linha do tempo muda (corte, divisão, velocidade), reposiciona o preview
+  // Linha do tempo mudou (corte, divisão, velocidade): reposiciona o preview
   useEffect(() => {
-    const total = totalOf(segments);
-    const t = clamp(timeRef.current, 0, total);
-    if (t !== timeRef.current) setTime(t);
-    if (!st.current.playing) load(t, false);
+    const t = clamp(store.get().time, 0, totalOf(segments));
+    if (t !== store.get().time) store.set({ time: t });
+    if (!store.get().playing) load(t, false);
     else if (!segments.length) pause();
     else {
       const seg = segments[st.current.index];
@@ -164,9 +150,15 @@ export function usePlayer(segments) {
         applyGain(seg, t);
       }
     }
-  }, [segments, load, pause, applyGain]);
+  }, [segments, load, pause, applyGain, store]);
 
-  useEffect(() => () => cancelAnimationFrame(st.current.raf), []);
+  useEffect(() => () => {
+    cancelAnimationFrame(st.current.raf);
+    if (audio.current) audio.current.ctx.close().catch(() => {});
+  }, []);
 
-  return { videoRef, time, playing, play, pause, toggle, seek, onLoadedMetadata, sourceTime, audioRef: audio };
+  return useMemo(
+    () => ({ videoRef, store, play, pause, toggle, seek, onLoadedMetadata, getTime: () => store.get().time }),
+    [store, play, pause, toggle, seek, onLoadedMetadata]
+  );
 }

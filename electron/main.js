@@ -1,444 +1,84 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, shell, Notification, net } = require('electron');
-const path = require('path');
+// Ponto de entrada do processo principal: só monta as peças.
+//   core/      → segurança (validação, autorizações) e log
+//   services/  → FFmpeg, legenda, projetos, protocolo de mídia, atualização, limpeza
+//   ipc/       → canais que a interface pode chamar (todos validados)
 const fs = require('fs');
-const { Readable } = require('stream');
-const engine = require('./engine');
-const stt = require('./transcribe');
+const path = require('path');
+const { app, BrowserWindow } = require('electron');
+const log = require('./core/logger');
+const { Grants, isVideoPath, isProjectPath, assertLocalPath } = require('./core/security');
+const mediaProtocol = require('./services/mediaProtocol');
+const tempCleanup = require('./services/tempCleanup');
+const updater = require('./services/updater');
+const windowFactory = require('./window');
 
-// Protocolo "media://" para o preview tocar arquivos locais com segurança
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'media',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true },
-  },
-]);
-
-const VIDEO_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'wmv', 'mts', 'm2ts', '3gp'];
-const PROJECT_EXT = 'kortin';
-const MIME = {
-  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
-  '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.3gp': 'video/3gpp',
+const ctx = {
+  grants: new Grants(),
+  state: { currentExport: null, currentStt: null, downloadAbort: null, isDirty: false, pendingOpen: [] },
+  win: null,
+  window: () => ctx.win,
+  send: (channel, payload) => ctx.win?.webContents.send(channel, payload),
 };
 
-// Só arquivos que o usuário importou podem ser lidos pelo preview
-const allowedFiles = new Set();
-let mainWindow = null;
-let currentExport = null;
-let isDirty = false;
-let pendingOpen = [];
+/** Arquivos recebidos pela linha de comando ("Abrir com Kortin"): autoriza e devolve os válidos. */
+function filesFromArgv(argv) {
+  const out = [];
+  for (const a of argv.slice(1)) {
+    if (a.startsWith('-')) continue;
+    try {
+      const p = assertLocalPath(path.resolve(a));
+      if (!fs.existsSync(p)) continue;
+      if (isVideoPath(p)) ctx.grants.allowMedia(p);
+      else if (isProjectPath(p)) ctx.grants.allowProject(p);
+      else continue;
+      out.push(p);
+    } catch { /* recusado */ }
+  }
+  return out;
+}
 
-const autosavePath = () => path.join(app.getPath('userData'), 'recuperacao.kortin');
+mediaProtocol.registerPrivileged();
 
-// ---------- Uma única janela: "Abrir com Kortin" reaproveita o app aberto ----------
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', (_e, argv) => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+    const win = ctx.win;
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
     const files = filesFromArgv(argv);
-    if (files.length) mainWindow.webContents.send('app:openFiles', files);
-  });
-}
-
-function filesFromArgv(argv) {
-  const exts = [...VIDEO_EXT, PROJECT_EXT];
-  return argv
-    .slice(1)
-    .filter((a) => !a.startsWith('-') && exts.includes(path.extname(a).slice(1).toLowerCase()))
-    .map((a) => path.resolve(a))
-    .filter((a) => fs.existsSync(a));
-}
-
-function registerMediaProtocol() {
-  protocol.handle('media', async (request) => {
-    try {
-      const url = new URL(request.url);
-      const filePath = decodeURIComponent(url.pathname.slice(1));
-      if (!allowedFiles.has(filePath)) return new Response('Acesso negado', { status: 403 });
-
-      const { size } = await fs.promises.stat(filePath);
-      const type = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
-      const range = request.headers.get('range');
-
-      if (range) {
-        const m = /bytes=(\d*)-(\d*)/.exec(range) || [];
-        let start = m[1] ? parseInt(m[1], 10) : 0;
-        let end = m[2] ? parseInt(m[2], 10) : size - 1;
-        if (!m[1] && m[2]) {
-          start = Math.max(0, size - parseInt(m[2], 10));
-          end = size - 1;
-        }
-        end = Math.min(end, size - 1);
-        if (start > end) return new Response(null, { status: 416 });
-        const stream = fs.createReadStream(filePath, { start, end });
-        return new Response(Readable.toWeb(stream), {
-          status: 206,
-          headers: {
-            'Content-Type': type,
-            'Content-Length': String(end - start + 1),
-            'Content-Range': `bytes ${start}-${end}/${size}`,
-            'Accept-Ranges': 'bytes',
-            'Access-Control-Allow-Origin': '*',
-          },
-        });
-      }
-
-      return new Response(Readable.toWeb(fs.createReadStream(filePath)), {
-        status: 200,
-        headers: {
-          'Content-Type': type,
-          'Content-Length': String(size),
-          'Accept-Ranges': 'bytes',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
-    } catch (err) {
-      return new Response(String(err.message || err), { status: 500 });
-    }
-  });
-}
-
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1100,
-    minHeight: 700,
-    title: 'Kortin',
-    icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    backgroundColor: '#0e0f13',
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+    if (files.length) ctx.send('app:openFiles', files);
   });
 
-  // Links externos abrem no navegador, nunca dentro do app
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  process.on('uncaughtException', (err) => log.error('main', 'exceção não tratada', err));
+  process.on('unhandledRejection', (err) => log.error('main', 'promessa rejeitada sem tratamento', err));
 
-  // Arquivos passados ao abrir ("Abrir com Kortin" ou duplo clique em um .kortin)
-  pendingOpen = filesFromArgv(process.argv);
+  app.whenReady().then(() => {
+    log.init(path.join(app.getPath('userData'), 'logs'));
+    log.info('main', `Kortin ${app.getVersion()} iniciando`);
+    windowFactory.harden();
+    mediaProtocol.register(ctx.grants);
 
-  // Aviso ao fechar com alterações não salvas
-  mainWindow.on('close', (e) => {
-    if (currentExport) {
-      const stop = dialog.showMessageBoxSync(mainWindow, {
-        type: 'warning',
-        buttons: ['Continuar exportando', 'Cancelar e sair'],
-        defaultId: 0,
-        cancelId: 0,
-        title: 'Exportação em andamento',
-        message: 'Um vídeo ainda está sendo exportado.',
-        detail: 'Se sair agora, a exportação é cancelada.',
-      });
-      if (stop === 0) return e.preventDefault();
-      currentExport.cancel();
-    }
-    if (!isDirty) {
-      try { fs.unlinkSync(autosavePath()); } catch {}
-      return;
-    }
-    const choice = dialog.showMessageBoxSync(mainWindow, {
-      type: 'question',
-      buttons: ['Voltar ao projeto', 'Sair mesmo assim'],
-      defaultId: 0,
-      cancelId: 0,
-      title: 'Projeto não salvo',
-      message: 'Você tem alterações não salvas.',
-      detail: 'Se sair agora, o Kortin vai oferecer a recuperação deste projeto na próxima vez que abrir.',
+    require('./ipc/media').register(ctx);
+    require('./ipc/project').register(ctx);
+    require('./ipc/export').register(ctx);
+    require('./ipc/captions').register(ctx);
+    require('./ipc/app').register(ctx);
+
+    tempCleanup.cleanup(ctx.modelsDir());
+    ctx.state.pendingOpen = filesFromArgv(process.argv);
+    ctx.win = windowFactory.create(ctx);
+    updater.setup(ctx.send);
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) ctx.win = windowFactory.create(ctx);
     });
-    if (choice === 0) e.preventDefault();
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  }
+  app.on('window-all-closed', () => {
+    ctx.state.currentExport?.cancel();
+    ctx.state.currentStt?.cancel();
+    if (process.platform !== 'darwin') app.quit();
+  });
 }
-
-// ---------- Mídia ----------
-
-ipcMain.handle('dialog:openVideos', async () => {
-  const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Importar vídeos',
-    properties: ['openFile', 'multiSelections'],
-    filters: [
-      { name: 'Vídeos', extensions: VIDEO_EXT },
-      { name: 'Todos os arquivos', extensions: ['*'] },
-    ],
-  });
-  return res.canceled ? [] : res.filePaths;
-});
-
-ipcMain.handle('media:probe', async (_e, filePath) => {
-  if (typeof filePath !== 'string' || !fs.existsSync(filePath)) {
-    throw new Error('Arquivo não encontrado.');
-  }
-  const info = await engine.probe(filePath);
-  const thumb = await engine.thumbnail(filePath, Math.min(1, info.duration / 2));
-  allowedFiles.add(filePath);
-  return { ...info, path: filePath, name: path.basename(filePath), thumb };
-});
-
-ipcMain.handle('media:peaks', async (_e, filePath) => {
-  if (!allowedFiles.has(filePath)) return [];
-  return engine.audioPeaks(filePath, 50);
-});
-
-// ---------- Legenda automática (IA local) ----------
-
-const modelsDir = () => path.join(app.getPath('userData'), 'modelos');
-const transcriptsDir = () => path.join(app.getPath('userData'), 'transcricoes');
-let downloadAbort = null;
-let currentStt = null;
-
-ipcMain.handle('captions:status', () => ({
-  available: stt.isAvailable(),
-  models: stt.modelStatus(modelsDir()),
-}));
-
-ipcMain.handle('captions:download', async (event, key) => {
-  if (downloadAbort) throw new Error('Já existe um download em andamento.');
-  downloadAbort = new AbortController();
-  try {
-    await stt.downloadModel(
-      modelsDir(),
-      key,
-      (p, bytes) => event.sender.send('captions:download-progress', { key, p, bytes }),
-      (url, opts) => net.fetch(url, opts),
-      downloadAbort.signal
-    );
-    return { ok: true };
-  } catch (err) {
-    if (downloadAbort?.signal.aborted) return { cancelled: true };
-    throw new Error(`Não foi possível baixar o modelo: ${err.message}`);
-  } finally {
-    downloadAbort = null;
-  }
-});
-
-ipcMain.handle('captions:cancel-download', () => downloadAbort?.abort());
-
-ipcMain.handle('captions:transcribe', async (event, { filePath, model, language }) => {
-  if (!allowedFiles.has(filePath)) throw new Error('Arquivo não autorizado.');
-  if (currentStt) throw new Error('Já existe uma transcrição em andamento.');
-  // mesmo arquivo + modelo + idioma: devolve a transcrição já feita
-  const key = stt.cacheKey(filePath, model, language);
-  const cached = path.join(transcriptsDir(), `${key}.json`);
-  try {
-    return JSON.parse(fs.readFileSync(cached, 'utf8'));
-  } catch {}
-  let proc = null;
-  currentStt = { cancel: () => proc && proc.kill('SIGKILL') };
-  try {
-    const res = await stt.transcribe(filePath, {
-      modelsDir: modelsDir(),
-      model,
-      language,
-      onSpawn: (p) => (proc = p),
-      onProgress: (p) => event.sender.send('captions:progress', { filePath, p }),
-    });
-    if (!res.cancelled) {
-      fs.mkdirSync(transcriptsDir(), { recursive: true });
-      fs.writeFileSync(cached, JSON.stringify(res), 'utf8');
-    }
-    return res;
-  } finally {
-    currentStt = null;
-  }
-});
-
-ipcMain.handle('captions:cancel', () => currentStt?.cancel());
-
-// ---------- Projetos ----------
-
-function readProject(file) {
-  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (data?.app !== 'kortin' || !Array.isArray(data.clips)) {
-    throw new Error('Este arquivo não é um projeto do Kortin.');
-  }
-  return data;
-}
-
-ipcMain.handle('project:open', async (_e, filePath) => {
-  let file = filePath;
-  if (!file) {
-    const res = await dialog.showOpenDialog(mainWindow, {
-      title: 'Abrir projeto',
-      properties: ['openFile'],
-      filters: [{ name: 'Projeto Kortin', extensions: [PROJECT_EXT] }],
-    });
-    if (res.canceled) return null;
-    file = res.filePaths[0];
-  }
-  return { path: file, data: readProject(file) };
-});
-
-ipcMain.handle('project:save', async (_e, { data, filePath, saveAs }) => {
-  let file = filePath;
-  if (!file || saveAs) {
-    const res = await dialog.showSaveDialog(mainWindow, {
-      title: 'Salvar projeto',
-      defaultPath: file || path.join(app.getPath('documents'), 'Meu projeto.kortin'),
-      filters: [{ name: 'Projeto Kortin', extensions: [PROJECT_EXT] }],
-    });
-    if (res.canceled) return null;
-    file = res.filePath;
-  }
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tmp, file); // grava em duas etapas para nunca corromper o arquivo
-  return file;
-});
-
-ipcMain.handle('autosave:write', (_e, data) => {
-  try {
-    const tmp = `${autosavePath()}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
-    fs.renameSync(tmp, autosavePath());
-  } catch {}
-});
-
-ipcMain.handle('autosave:read', () => {
-  try {
-    const stat = fs.statSync(autosavePath());
-    return { savedAt: stat.mtimeMs, data: readProject(autosavePath()) };
-  } catch {
-    return null;
-  }
-});
-
-ipcMain.handle('autosave:clear', () => {
-  try { fs.unlinkSync(autosavePath()); } catch {}
-});
-
-ipcMain.on('app:dirty', (_e, dirty, title) => {
-  isDirty = !!dirty;
-  if (mainWindow && title) mainWindow.setTitle(title);
-});
-
-ipcMain.handle('app:pendingFiles', () => {
-  const files = pendingOpen;
-  pendingOpen = [];
-  return files;
-});
-
-// ---------- Exportação ----------
-
-ipcMain.handle('dialog:saveExport', async (_e, suggestedName) => {
-  const res = await dialog.showSaveDialog(mainWindow, {
-    title: 'Exportar vídeo',
-    defaultPath: path.join(app.getPath('videos'), suggestedName || 'kortin-video.mp4'),
-    filters: [{ name: 'Vídeo MP4', extensions: ['mp4'] }],
-  });
-  return res.canceled ? null : res.filePath;
-});
-
-ipcMain.handle('dialog:chooseFolder', async () => {
-  const res = await dialog.showOpenDialog(mainWindow, {
-    title: 'Escolha a pasta para salvar os vídeos',
-    defaultPath: app.getPath('videos'),
-    properties: ['openDirectory', 'createDirectory'],
-  });
-  return res.canceled ? null : res.filePaths[0];
-});
-
-ipcMain.handle('path:join', (_e, dir, name) => path.join(dir, name));
-
-ipcMain.handle('export:hardware', () => engine.detectHardwareEncoders());
-
-ipcMain.handle('export:start', async (event, job) => {
-  if (currentExport) throw new Error('Já existe uma exportação em andamento.');
-  for (const c of job.clips) {
-    if (!allowedFiles.has(c.path)) throw new Error('Arquivo não autorizado na linha do tempo.');
-  }
-  let last = -1;
-  currentExport = engine.exportVideo(
-    job.clips,
-    job.options,
-    (p) => {
-      const pct = Math.round(p * 1000) / 10;
-      if (pct !== last) {
-        last = pct;
-        event.sender.send('export:progress', pct);
-      }
-    },
-    (encoder) => event.sender.send('export:encoder', encoder)
-  );
-  try {
-    const res = await currentExport.promise;
-    if (res.ok) notifyDone(res.output);
-    return res;
-  } finally {
-    currentExport = null;
-  }
-});
-
-function notifyDone(output) {
-  if (!Notification.isSupported() || (mainWindow && mainWindow.isFocused())) return;
-  const n = new Notification({ title: 'Vídeo pronto', body: path.basename(output), silent: false });
-  n.on('click', () => shell.showItemInFolder(output));
-  n.show();
-}
-
-ipcMain.handle('export:cancel', () => {
-  if (currentExport) currentExport.cancel();
-  return true;
-});
-
-ipcMain.handle('shell:showItem', (_e, p) => {
-  if (typeof p === 'string' && fs.existsSync(p)) shell.showItemInFolder(p);
-});
-
-// ---------- Atualização automática (pelo GitHub Releases) ----------
-
-let updater = null;
-
-function setupUpdates() {
-  // Só no app instalado: a versão portátil e o modo desenvolvimento não se atualizam sozinhos
-  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_DIR) return;
-  try {
-    ({ autoUpdater: updater } = require('electron-updater'));
-  } catch {
-    return;
-  }
-  updater.autoDownload = true;
-  updater.autoInstallOnAppQuit = true;
-  updater.on('update-downloaded', (info) => {
-    mainWindow?.webContents.send('update:ready', { version: info.version });
-  });
-  updater.on('error', () => {}); // sem internet ou sem versão nova: segue a vida
-  updater.checkForUpdates().catch(() => {});
-}
-
-ipcMain.handle('update:install', () => {
-  if (updater) updater.quitAndInstall();
-});
-
-ipcMain.handle('app:version', () => app.getVersion());
-
-// ---------- Ciclo de vida ----------
-
-app.whenReady().then(() => {
-  registerMediaProtocol();
-  createWindow();
-  setupUpdates();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on('window-all-closed', () => {
-  if (currentExport) currentExport.cancel();
-  if (currentStt) currentStt.cancel();
-  if (process.platform !== 'darwin') app.quit();
-});

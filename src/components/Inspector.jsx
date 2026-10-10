@@ -2,6 +2,15 @@ import {
   MAX_FADE, MAX_VOLUME, MIN_CLIP, SPEEDS, clipLength, formatSpeed, formatTime, sourceTime,
 } from '../lib/timeline';
 import { Icon } from './Icons';
+import { useDerivedPlayhead } from '../state/playhead';
+
+// Estado do cursor em relação ao clipe, como bits: 1 = dentro, 2 = pode marcar início, 4 = pode marcar fim.
+// Primitivo e quase constante: o Inspector não re-renderiza a cada quadro do play.
+function cursorFlags(clip, segment, time) {
+  if (!segment || time < segment.start || time > segment.start + segment.len) return 0;
+  const local = sourceTime(segment, time);
+  return 1 | (clip.outPoint - local >= MIN_CLIP ? 2 : 0) | (local - clip.inPoint >= MIN_CLIP ? 4 : 0);
+}
 
 const SHORTCUTS = (
   <div className="shortcuts">
@@ -24,7 +33,8 @@ const SHORTCUTS = (
   </div>
 );
 
-function Slider({ label, value, display, min, max, step, disabled, onStart, onChange, icon }) {
+/** Slider com transação: um arrasto inteiro vira um único passo no desfazer */
+function Slider({ label, value, display, min, max, step, disabled, onChange, onEnd, icon }) {
   return (
     <div className="insp-control">
       <div className="insp-control-head">
@@ -35,19 +45,19 @@ function Slider({ label, value, display, min, max, step, disabled, onStart, onCh
         {icon}
         <input
           type="range" min={min} max={max} step={step} value={value} disabled={disabled}
-          onPointerDown={onStart}
-          onKeyDown={(e) => { e.stopPropagation(); if (!e.repeat) onStart(); }}
+          onKeyDown={(e) => e.stopPropagation()}
           onChange={(e) => onChange(Number(e.target.value))}
+          onPointerUp={onEnd}
+          onKeyUp={onEnd}
+          onBlur={onEnd}
         />
       </div>
     </div>
   );
 }
 
-export default function Inspector({
-  clip, time, segment, onSetIn, onSetOut, onSplit, onDuplicate, onDelete, onReset, onChangeStart, onChange,
-}) {
-  if (!clip) {
+export default function Inspector(props) {
+  if (!props.clip) {
     return (
       <aside className="panel inspector">
         <div className="panel-head"><span>Propriedades</span></div>
@@ -58,14 +68,20 @@ export default function Inspector({
       </aside>
     );
   }
+  return <ClipInspector {...props} />;
+}
+
+function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDelete, onReset }) {
+  const flags = useDerivedPlayhead(store, (t) => cursorFlags(clip, segment, t), [clip, segment]);
+  const inside = !!(flags & 1);
+  const canIn = !!(flags & 2);
+  const canOut = !!(flags & 4);
+  // no clique lê o tempo exato (não o do último render)
+  const localNow = () => sourceTime(segment, store.get().time);
 
   const len = clipLength(clip);
   const speed = clip.speed || 1;
   const volume = clip.hasAudio ? clip.volume ?? 1 : 0;
-  const inside = segment && time >= segment.start && time <= segment.start + segment.len;
-  const localTime = inside ? sourceTime(segment, time) : null;
-  const canIn = localTime != null && clip.outPoint - localTime >= MIN_CLIP;
-  const canOut = localTime != null && localTime - clip.inPoint >= MIN_CLIP;
   const maxFade = Math.min(MAX_FADE, Math.floor((len / 2) * 10) / 10);
 
   return (
@@ -92,7 +108,7 @@ export default function Inspector({
               <button
                 key={sp}
                 className={sp === speed ? 'active' : ''}
-                onClick={() => { if (sp !== speed) { onChangeStart(); onChange({ speed: sp }); } }}
+                onClick={() => sp !== speed && edit.commit({ speed: sp })}
               >
                 {formatSpeed(sp)}
               </button>
@@ -106,14 +122,14 @@ export default function Inspector({
           display={clip.hasAudio ? `${Math.round(volume * 100)}%` : 'sem áudio'}
           min={0} max={MAX_VOLUME * 100} step={1}
           disabled={!clip.hasAudio}
-          onStart={onChangeStart}
-          onChange={(v) => onChange({ volume: v / 100 })}
+          onChange={(v) => edit.preview({ volume: v / 100 })}
+          onEnd={edit.end}
           icon={
             <button
               className={`icon-btn${volume === 0 ? ' active' : ''}`}
               disabled={!clip.hasAudio}
               title={volume === 0 ? 'Ativar som' : 'Silenciar clipe'}
-              onClick={() => { onChangeStart(); onChange({ volume: volume === 0 ? 1 : 0 }); }}
+              onClick={() => edit.commit({ volume: volume === 0 ? 1 : 0 })}
             >
               {volume === 0 ? <Icon.Mute /> : <Icon.Volume />}
             </button>
@@ -127,8 +143,8 @@ export default function Inspector({
             display={`${(clip.fadeIn || 0).toFixed(1).replace('.', ',')} s`}
             min={0} max={maxFade} step={0.1}
             disabled={!clip.hasAudio || maxFade <= 0}
-            onStart={onChangeStart}
-            onChange={(v) => onChange({ fadeIn: v })}
+            onChange={(v) => edit.preview({ fadeIn: v })}
+            onEnd={edit.end}
           />
           <Slider
             label="Fade de saída"
@@ -136,8 +152,8 @@ export default function Inspector({
             display={`${(clip.fadeOut || 0).toFixed(1).replace('.', ',')} s`}
             min={0} max={maxFade} step={0.1}
             disabled={!clip.hasAudio || maxFade <= 0}
-            onStart={onChangeStart}
-            onChange={(v) => onChange({ fadeOut: v })}
+            onChange={(v) => edit.preview({ fadeOut: v })}
+            onEnd={edit.end}
           />
         </div>
 
@@ -146,16 +162,16 @@ export default function Inspector({
             type="checkbox"
             checked={!!clip.denoise}
             disabled={!clip.hasAudio}
-            onChange={(e) => { onChangeStart(); onChange({ denoise: e.target.checked }); }}
+            onChange={(e) => edit.commit({ denoise: e.target.checked })}
           />
           <span>Reduzir ruído de fundo <small className="muted">(na exportação)</small></span>
         </label>
 
         <div className="insp-actions">
-          <button className="btn" disabled={!canIn} onClick={() => onSetIn(localTime)} title="O clipe passa a começar onde está o cursor">
+          <button className="btn" disabled={!canIn} onClick={() => edit.commit({ inPoint: localNow() })} title="O clipe passa a começar onde está o cursor">
             [ Início aqui
           </button>
-          <button className="btn" disabled={!canOut} onClick={() => onSetOut(localTime)} title="O clipe passa a terminar onde está o cursor">
+          <button className="btn" disabled={!canOut} onClick={() => edit.commit({ outPoint: localNow() })} title="O clipe passa a terminar onde está o cursor">
             Fim aqui ]
           </button>
           <button className="btn" onClick={onSplit}><Icon.Split width={15} height={15} /> Dividir</button>

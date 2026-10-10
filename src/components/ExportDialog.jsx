@@ -37,7 +37,7 @@ export default function ExportDialog({
       } else {
         const dir = await window.kortin.chooseFolder();
         if (!dir) return;
-        outputs = await Promise.all(formats.map((k) => window.kortin.joinPath(dir, fileName(k))));
+        outputs = await window.kortin.outputsInFolder(dir, formats.map(fileName));
       }
       const q = QUALITIES[quality];
       const encoder = useHw && hardware?.length ? hardware[0].id : 'libx264';

@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('kortin', {
       return null;
     }
   },
+  authorizeFiles: (paths) => ipcRenderer.invoke('files:authorize', paths),
 
   // legenda automática
   captionsStatus: () => ipcRenderer.invoke('captions:status'),
@@ -42,7 +43,7 @@ contextBridge.exposeInMainWorld('kortin', {
   // exportação
   chooseExportPath: (name) => ipcRenderer.invoke('dialog:saveExport', name),
   chooseFolder: () => ipcRenderer.invoke('dialog:chooseFolder'),
-  joinPath: (dir, name) => ipcRenderer.invoke('path:join', dir, name),
+  outputsInFolder: (dir, names) => ipcRenderer.invoke('export:outputsInFolder', dir, names),
   hardwareEncoders: () => ipcRenderer.invoke('export:hardware'),
   onExportEncoder: listen('export:encoder'),
   startExport: (job) => ipcRenderer.invoke('export:start', job),
