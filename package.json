@@ -1,0 +1,72 @@
+{
+  "name": "klipo",
+  "productName": "Klipo",
+  "version": "0.1.0",
+  "description": "Editor de vídeo simples, rápido e com IA. Módulo 1: editor base.",
+  "main": "electron/main.js",
+  "author": "Thiago Lynch",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "postinstall": "install-electron --no",
+    "dev": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "build": "vite build",
+    "start": "vite build && electron .",
+    "dist": "vite build && electron-builder --win --publish never",
+    "test:engine": "node tests/engine.test.js"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^8.3.4",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.klipo.app",
+    "productName": "Klipo",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Klipo-Instalador-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "Klipo-Portatil-${version}.exe"
+    },
+    "publish": null
+  }
+}
