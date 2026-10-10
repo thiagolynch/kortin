@@ -91,7 +91,39 @@ export function mediaToClip(m) {
     height: m.height,
     hasAudio: m.hasAudio,
     thumb: m.thumb,
+    volume: 1,
   };
+}
+
+export const PROJECT_VERSION = 1;
+
+/** Converte o estado do editor no conteúdo do arquivo .kortin */
+export function serializeProject({ clips, aspect, fit }) {
+  return {
+    app: 'kortin',
+    version: PROJECT_VERSION,
+    aspect,
+    fit,
+    clips: clips.map(({ id, path, name, inPoint, outPoint, volume }) => ({
+      id, path, name, inPoint, outPoint, volume: volume ?? 1,
+    })),
+  };
+}
+
+/** Reconstrói os clipes a partir do arquivo, usando as informações lidas de cada vídeo */
+export function restoreClips(saved, infoByPath) {
+  return saved
+    .filter((c) => infoByPath[c.path])
+    .map((c) => {
+      const info = infoByPath[c.path];
+      const outPoint = clamp(c.outPoint, MIN_CLIP, info.duration);
+      const inPoint = clamp(c.inPoint, 0, outPoint - MIN_CLIP);
+      return { ...mediaToClip(info), id: c.id || uid(), inPoint, outPoint, volume: c.volume ?? 1 };
+    });
+}
+
+export function baseName(p) {
+  return String(p || '').split(/[\\/]/).pop().replace(/\.kortin$/i, '');
 }
 
 export function cleanError(err) {

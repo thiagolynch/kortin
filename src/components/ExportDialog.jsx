@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ASPECTS, FITS, QUALITIES, cleanError, formatTime } from '../lib/timeline';
 
-export default function ExportDialog({ clips, total, aspect, fit, onClose }) {
+export default function ExportDialog({ clips, total, aspect, fit, projectName, onClose }) {
   const [quality, setQuality] = useState('padrao');
   const [phase, setPhase] = useState('config'); // config | running | done | error
   const [progress, setProgress] = useState(0);
@@ -9,20 +9,20 @@ export default function ExportDialog({ clips, total, aspect, fit, onClose }) {
   const [error, setError] = useState('');
   const [startedAt, setStartedAt] = useState(0);
 
-  useEffect(() => window.klipo.onExportProgress(setProgress), []);
+  useEffect(() => window.kortin.onExportProgress(setProgress), []);
 
   const a = ASPECTS[aspect];
 
   const start = async () => {
-    const path = await window.klipo.chooseExportPath(`klipo-${aspect.replace(':', 'x')}.mp4`);
+    const path = await window.kortin.chooseExportPath(`${projectName || 'kortin'}-${aspect.replace(':', 'x')}.mp4`);
     if (!path) return;
     const q = QUALITIES[quality];
     setPhase('running');
     setProgress(0);
     setStartedAt(Date.now());
     try {
-      const res = await window.klipo.startExport({
-        clips: clips.map(({ path, inPoint, outPoint, hasAudio }) => ({ path, inPoint, outPoint, hasAudio })),
+      const res = await window.kortin.startExport({
+        clips: clips.map(({ path, inPoint, outPoint, hasAudio, volume }) => ({ path, inPoint, outPoint, hasAudio, volume })),
         options: { width: a.width, height: a.height, fit, fps: 30, crf: q.crf, preset: q.preset, output: path },
       });
       if (res?.cancelled) {
@@ -63,6 +63,8 @@ export default function ExportDialog({ clips, total, aspect, fit, onClose }) {
               ))}
             </div>
 
+            <p className="export-promise">✓ Sem marca d'água · ✓ Qualidade máxima liberada · ✓ Grátis</p>
+
             <div className="modal-actions">
               <button className="btn ghost" onClick={onClose}>Cancelar</button>
               <button className="btn primary" onClick={start}>Escolher local e exportar</button>
@@ -79,7 +81,7 @@ export default function ExportDialog({ clips, total, aspect, fit, onClose }) {
               <span>{eta != null ? `~${formatTime(eta, false)} restantes` : 'calculando…'}</span>
             </div>
             <div className="modal-actions">
-              <button className="btn danger" onClick={() => window.klipo.cancelExport()}>Cancelar exportação</button>
+              <button className="btn danger" onClick={() => window.kortin.cancelExport()}>Cancelar exportação</button>
             </div>
           </>
         )}
@@ -91,7 +93,7 @@ export default function ExportDialog({ clips, total, aspect, fit, onClose }) {
             <p className="center muted path">{output}</p>
             <div className="modal-actions">
               <button className="btn ghost" onClick={onClose}>Fechar</button>
-              <button className="btn primary" onClick={() => window.klipo.showInFolder(output)}>Mostrar na pasta</button>
+              <button className="btn primary" onClick={() => window.kortin.showInFolder(output)}>Mostrar na pasta</button>
             </div>
           </>
         )}

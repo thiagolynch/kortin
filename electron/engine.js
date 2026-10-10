@@ -1,4 +1,4 @@
-// Motor de vídeo do Klipo: leitura de arquivos, miniaturas e exportação via FFmpeg.
+// Motor de vídeo do Kortin: leitura de arquivos, miniaturas e exportação via FFmpeg.
 // Este arquivo não depende do Electron, então pode ser testado com Node puro.
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 
 function getFfmpegPath() {
-  if (process.env.KLIPO_FFMPEG) return process.env.KLIPO_FFMPEG;
+  if (process.env.KORTIN_FFMPEG) return process.env.KORTIN_FFMPEG;
   try {
     const p = require('ffmpeg-static');
     if (p) {
@@ -80,7 +80,7 @@ async function probe(file) {
 async function thumbnail(file, atSeconds) {
   const out = path.join(
     os.tmpdir(),
-    `klipo-thumb-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
+    `kortin-thumb-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
   );
   await run([
     '-hide_banner', '-loglevel', 'error', '-y',
@@ -104,7 +104,7 @@ const n = (x) => Number(x).toFixed(3);
 
 /**
  * Monta os argumentos do FFmpeg para exportar a linha do tempo.
- * clips: [{ path, inPoint, outPoint, hasAudio }]
+ * clips: [{ path, inPoint, outPoint, hasAudio, volume? (0 a 2) }]
  * opts:  { width, height, fit: 'blur'|'cover'|'contain', fps, crf, preset, output }
  */
 function buildExportArgs(clips, opts) {
@@ -152,9 +152,11 @@ function buildExportArgs(clips, opts) {
     }
 
     const afmt = `aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo`;
-    if (c.hasAudio) {
+    const volume = c.volume ?? 1;
+    if (c.hasAudio && volume > 0) {
+      const vol = volume !== 1 ? `,volume=${volume.toFixed(3)}` : '';
       filters.push(
-        `[${i}:a:0]${afmt},asetpts=PTS-STARTPTS,atrim=0:${n(dur)},apad=whole_dur=${n(dur)}[a${i}]`
+        `[${i}:a:0]${afmt},asetpts=PTS-STARTPTS,atrim=0:${n(dur)},apad=whole_dur=${n(dur)}${vol}[a${i}]`
       );
     } else {
       silentInputs.push(dur);

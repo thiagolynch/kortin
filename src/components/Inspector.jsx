@@ -1,7 +1,9 @@
 import { formatTime, MIN_CLIP } from '../lib/timeline';
 import { Icon } from './Icons';
 
-export default function Inspector({ clip, time, segment, onSetIn, onSetOut, onSplit, onDelete, onReset }) {
+export default function Inspector({
+  clip, time, segment, onSetIn, onSetOut, onSplit, onDuplicate, onDelete, onReset, onVolumeStart, onVolume,
+}) {
   if (!clip) {
     return (
       <aside className="panel inspector">
@@ -14,10 +16,14 @@ export default function Inspector({ clip, time, segment, onSetIn, onSetOut, onSp
               <dt>Espaço</dt><dd>Play / pausa</dd>
               <dt>S</dt><dd>Dividir no cursor</dd>
               <dt>Delete</dt><dd>Excluir clipe</dd>
-              <dt>Ctrl+Z / Ctrl+Y</dt><dd>Desfazer / refazer</dd>
+              <dt>Ctrl+D</dt><dd>Duplicar clipe</dd>
+              <dt>Ctrl+S</dt><dd>Salvar projeto</dd>
+              <dt>Ctrl+O</dt><dd>Abrir projeto</dd>
+              <dt>Ctrl+Z</dt><dd>Desfazer</dd>
+              <dt>Ctrl+Y</dt><dd>Refazer</dd>
               <dt>← →</dt><dd>Avançar 1 quadro</dd>
-              <dt>Shift + ← →</dt><dd>Avançar 1 segundo</dd>
-              <dt>Ctrl + roda</dt><dd>Zoom na linha do tempo</dd>
+              <dt>Shift ← →</dt><dd>Avançar 1 segundo</dd>
+              <dt>Ctrl + roda</dt><dd>Zoom na timeline</dd>
             </dl>
           </div>
         </div>
@@ -26,6 +32,7 @@ export default function Inspector({ clip, time, segment, onSetIn, onSetOut, onSp
   }
 
   const len = clip.outPoint - clip.inPoint;
+  const volume = clip.hasAudio ? clip.volume ?? 1 : 0;
   const inside = segment && time >= segment.start && time <= segment.start + segment.len;
   const localTime = inside ? clip.inPoint + (time - segment.start) : null;
   const canIn = localTime != null && clip.outPoint - localTime >= MIN_CLIP;
@@ -48,6 +55,31 @@ export default function Inspector({ clip, time, segment, onSetIn, onSetOut, onSp
           <div><label>Original</label><span>{formatTime(clip.duration)}</span></div>
         </div>
 
+        <div className="insp-volume">
+          <div className="insp-volume-head">
+            <label>Volume</label>
+            <span>{clip.hasAudio ? `${Math.round(volume * 100)}%` : 'sem áudio'}</span>
+          </div>
+          <div className="insp-volume-row">
+            <button
+              className={`icon-btn${volume === 0 ? ' active' : ''}`}
+              disabled={!clip.hasAudio}
+              title={volume === 0 ? 'Ativar som' : 'Silenciar clipe'}
+              onClick={() => { onVolumeStart(); onVolume(volume === 0 ? 1 : 0); }}
+            >
+              {volume === 0 ? <Icon.Mute /> : <Icon.Volume />}
+            </button>
+            <input
+              type="range" min={0} max={100} step={1}
+              value={Math.round(volume * 100)}
+              disabled={!clip.hasAudio}
+              onPointerDown={onVolumeStart}
+              onKeyDown={(e) => { e.stopPropagation(); if (!e.repeat) onVolumeStart(); }}
+              onChange={(e) => onVolume(Number(e.target.value) / 100)}
+            />
+          </div>
+        </div>
+
         <div className="insp-actions">
           <button className="btn" disabled={!canIn} onClick={() => onSetIn(localTime)} title="O clipe passa a começar onde está o cursor">
             [ Início aqui
@@ -56,6 +88,7 @@ export default function Inspector({ clip, time, segment, onSetIn, onSetOut, onSp
             Fim aqui ]
           </button>
           <button className="btn" onClick={onSplit}><Icon.Split width={15} height={15} /> Dividir</button>
+          <button className="btn" onClick={onDuplicate}><Icon.Copy width={15} height={15} /> Duplicar</button>
           <button className="btn" onClick={onReset} disabled={clip.inPoint === 0 && clip.outPoint === clip.duration}>
             Restaurar
           </button>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ASPECTS } from '../lib/timeline';
 
-export default function Preview({ player, aspect, fit, currentClip, empty, onImport }) {
+export default function Preview({ player, aspect, fit, currentClip, empty, onImport, onOpenProject }) {
   const wrapRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const a = ASPECTS[aspect];
@@ -39,11 +39,19 @@ export default function Preview({ player, aspect, fit, currentClip, empty, onImp
           preload="auto"
         />
         {empty && (
-          <button className="frame-empty" onClick={onImport}>
-            <span className="frame-empty-icon">＋</span>
-            <strong>Importe um vídeo para começar</strong>
-            <small>ou arraste os arquivos para qualquer lugar da janela</small>
-          </button>
+          <div className="frame-empty">
+            <button className="frame-empty-main" onClick={onImport}>
+              <span className="frame-empty-icon">＋</span>
+              <strong>Importe um vídeo para começar</strong>
+              <small>ou arraste os arquivos para qualquer lugar da janela</small>
+            </button>
+            <button className="link-btn" onClick={onOpenProject}>Abrir um projeto salvo</button>
+            <ul className="promise">
+              <li>Sem anúncios</li>
+              <li>Sem marca d'água</li>
+              <li>Exportação grátis</li>
+            </ul>
+          </div>
         )}
       </div>
     </div>

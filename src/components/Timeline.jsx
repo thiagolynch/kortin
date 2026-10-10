@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { clamp, formatTime, MIN_CLIP } from '../lib/timeline';
 
 const PAD = 16; // margem esquerda da trilha (px)
-const DRAG_TYPE = 'application/x-klipo-clip';
+const DRAG_TYPE = 'application/x-kortin-clip';
 
 function tickStep(zoom) {
   // escolhe o espaçamento das marcações para ficarem a ~80px
