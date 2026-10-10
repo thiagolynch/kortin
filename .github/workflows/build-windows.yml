@@ -1,0 +1,46 @@
+name: Gerar .exe para Windows
+
+on:
+  # Ao criar uma tag v0.1.0, v0.2.0... gera o .exe e publica em "Releases"
+  push:
+    tags: ['v*']
+  # Permite rodar manualmente pela aba "Actions"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Testar o motor de vídeo
+        run: npm run test:engine
+
+      - name: Gerar o instalador e a versão portátil
+        run: npm run dist
+
+      - name: Guardar os .exe como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: Klipo-Windows
+          path: release/*.exe
+
+      - name: Publicar na página de Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+          generate_release_notes: true
