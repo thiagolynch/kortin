@@ -33,7 +33,9 @@ function assTime(t) {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(c).padStart(2, '0')}`;
 }
 
-const escapeText = (t) => String(t).replace(/\\/g, '/').replace(/[{}]/g, '').replace(/\r?\n/g, ' ');
+// texto do usuário: sem barra invertida (\N, \h…), sem chaves (tags de estilo) e sem caracteres de controle
+// eslint-disable-next-line no-control-regex
+const escapeText = (t) => String(t).replace(/\\/g, '/').replace(/[{}]/g, '').replace(/[\u0000-\u001f\u007f]+/g, ' ');
 
 /**
  * cues: legendas na linha do tempo · settings: { style, position (0 a 1, centro vertical), size, uppercase }

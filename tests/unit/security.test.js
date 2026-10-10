@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
+import path from 'node:path';
 import { require } from './_require';
 
 const { Grants, ValidationError, assertLocalPath, validateExportJob } = require('../../electron/core/security');
 
-const VIDEO = '/home/u/videos/a.mp4';
-const OUT = '/home/u/export/final.mp4';
+// caminhos absolutos no formato do sistema (no Windows viram C:\home\u\...)
+const abs = (p) => path.resolve(p);
+const VIDEO = abs('/home/u/videos/a.mp4');
+const OUT = abs('/home/u/export/final.mp4');
 
 function setup() {
   const g = new Grants();
@@ -28,8 +31,8 @@ describe('caminhos', () => {
   });
   it('recusa relativo, NUL e caminho gigante', () => {
     rejects(() => assertLocalPath('videos/a.mp4'));
-    rejects(() => assertLocalPath('/a\0.mp4'));
-    rejects(() => assertLocalPath(`/${'a'.repeat(5000)}`));
+    rejects(() => assertLocalPath(abs('/a\0.mp4')));
+    rejects(() => assertLocalPath(abs(`/${'a'.repeat(5000)}`)));
   });
 });
 
@@ -49,15 +52,15 @@ describe('validateExportJob', () => {
     rejects(() => validateExportJob(job({}, { speed: 1.1 }), setup()));
   });
   it('saída precisa ter sido escolhida pelo usuário', () => {
-    rejects(() => validateExportJob(job({ output: '/home/u/.bashrc.mp4' }), setup()), /Escolha/);
-    rejects(() => validateExportJob(job({ output: '/home/u/export/final.exe' }), setup()));
+    rejects(() => validateExportJob(job({ output: abs('/home/u/.bashrc.mp4') }), setup()), /Escolha/);
+    rejects(() => validateExportJob(job({ output: abs('/home/u/export/final.exe') }), setup()));
   });
   it('vídeo não autorizado é recusado', () => {
-    rejects(() => validateExportJob(job({}, { path: '/etc/shadow.mp4' }), setup()), /autorizado/);
+    rejects(() => validateExportJob(job({}, { path: abs('/etc/shadow.mp4') }), setup()), /autorizado/);
   });
   it('não deixa sobrescrever um vídeo de entrada', () => {
     const g = setup();
-    g.allowOutputDir('/home/u/videos');
+    g.allowOutputDir(abs('/home/u/videos'));
     rejects(() => validateExportJob(job({ output: VIDEO }), g), /substituir/);
   });
   it('fuzz: entrada arbitrária só gera ValidationError (nunca TypeError)', () => {

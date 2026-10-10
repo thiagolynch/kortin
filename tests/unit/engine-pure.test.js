@@ -116,7 +116,7 @@ describe('buildAss', () => {
       const line = ass.split('\n').find((l) => l.startsWith('Dialogue:'));
       if (!line) return;
       const body = line.slice(line.indexOf('}') + 1); // depois do bloco de posição
-      expect(body).not.toMatch(/[{}\\\n]/);
+      expect(body).not.toMatch(/[{}\\\u0000-\u001f]/);
     }));
   });
 });
