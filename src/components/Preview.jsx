@@ -37,6 +37,7 @@ export default function Preview({ player, aspect, fit, currentClip, empty, onImp
           className={`frame-video fit-${fit}`}
           playsInline
           preload="auto"
+          crossOrigin="anonymous"
         />
         {empty && (
           <div className="frame-empty">

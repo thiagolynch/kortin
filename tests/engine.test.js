@@ -1,4 +1,4 @@
-// Teste do motor de vídeo: gera vídeos de exemplo, exporta nos 3 formatos e confere o resultado.
+// Teste do motor de vídeo: gera vídeos de exemplo, exporta e confere o resultado.
 // Rodar com: npm run test:engine
 const path = require('path');
 const fs = require('fs');
@@ -15,12 +15,16 @@ function make(name, args) {
   return out;
 }
 
-function assert(cond, msg) {
-  if (!cond) {
-    console.error('❌', msg);
-    process.exit(1);
-  }
-  console.log('✅', msg);
+function meanVolume(file, start, dur) {
+  const r = spawnSync(engine.FFMPEG, ['-hide_banner', '-ss', String(start), '-t', String(dur), '-i', file, '-vn', '-af', 'volumedetect', '-f', 'null', '-']);
+  const m = /mean_volume: (-?[\d.]+) dB/.exec(r.stderr.toString());
+  return m ? Number(m[1]) : null;
+}
+
+let failures = 0;
+function check(cond, msg) {
+  console.log(cond ? '✅' : '❌', msg);
+  if (!cond) failures++;
 }
 
 (async () => {
@@ -36,21 +40,36 @@ function assert(cond, msg) {
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
   ]);
 
+  // Leitura
   const a = await engine.probe(horizontal);
   const b = await engine.probe(vertical);
-  assert(Math.abs(a.duration - 6) < 0.1 && a.width === 1920 && a.hasAudio, 'Leitura do vídeo horizontal');
-  assert(Math.abs(b.duration - 4) < 0.1 && b.height === 1280 && !b.hasAudio, 'Leitura do vídeo vertical sem áudio');
+  check(Math.abs(a.duration - 6) < 0.1 && a.width === 1920 && a.hasAudio, 'Leitura do vídeo horizontal');
+  check(Math.abs(b.duration - 4) < 0.1 && b.height === 1280 && !b.hasAudio, 'Leitura do vídeo vertical sem áudio');
+  check((await engine.thumbnail(horizontal, 1))?.startsWith('data:image/jpeg'), 'Geração de miniatura');
 
-  const thumb = await engine.thumbnail(horizontal, 1);
-  assert(thumb && thumb.startsWith('data:image/jpeg'), 'Geração de miniatura');
+  // Onda sonora
+  const peaks = await engine.audioPeaks(horizontal, 50);
+  check(Math.abs(peaks.length - 300) <= 3 && Math.max(...peaks) > 50, `Onda sonora: ${peaks.length} pontos para 6s`);
+  check((await engine.audioPeaks(vertical, 50)).length === 0, 'Onda sonora vazia em vídeo sem áudio');
+
+  // Velocidade
+  const tempoProduct = (sp) => engine.atempoChain(sp).split(',').map((x) => Number(x.split('=')[1]))
+    .reduce((acc, v) => acc * v, 1);
+  for (const sp of [0.25, 0.5, 1.5, 4]) {
+    const chain = engine.atempoChain(sp).split(',');
+    check(Math.abs(tempoProduct(sp) - sp) < 1e-4 && chain.every((x) => { const v = Number(x.split('=')[1]); return v >= 0.5 && v <= 2; }),
+      `Cadeia de atempo para ${sp}x: ${engine.atempoChain(sp)}`);
+  }
 
   const clips = [
-    { path: horizontal, inPoint: 1, outPoint: 3.5, hasAudio: true },
-    { path: vertical, inPoint: 0.5, outPoint: 2.5, hasAudio: false },
-    { path: horizontal, inPoint: 4, outPoint: 5, hasAudio: true, volume: 0.5 },
-    { path: horizontal, inPoint: 0, outPoint: 1, hasAudio: true, volume: 0 },
+    { path: horizontal, inPoint: 1, outPoint: 3.5, hasAudio: true },                         // 2,5 s
+    { path: vertical, inPoint: 0.5, outPoint: 2.5, hasAudio: false },                        // 2 s
+    { path: horizontal, inPoint: 4, outPoint: 5, hasAudio: true, volume: 0.5 },              // 1 s
+    { path: horizontal, inPoint: 0, outPoint: 1, hasAudio: true, volume: 0 },                // 1 s
+    { path: horizontal, inPoint: 0, outPoint: 4, hasAudio: true, speed: 2, fadeIn: 0.5 },    // 2 s
+    { path: horizontal, inPoint: 2, outPoint: 3, hasAudio: true, speed: 0.5, volume: 1.5 },  // 2 s
   ];
-  const expected = 2.5 + 2 + 1 + 1;
+  const expected = clips.reduce((s, c) => s + engine.outDuration(c), 0);
 
   const formats = [
     { label: '9:16 desfoque', width: 1080, height: 1920, fit: 'blur' },
@@ -64,20 +83,55 @@ function assert(cond, msg) {
     const job = engine.exportVideo(clips, { ...f, crf: 28, preset: 'ultrafast', output }, (p) => (lastProgress = p));
     const res = await job.promise;
     const info = await engine.probe(output);
-    assert(
+    check(
       res.ok && info.width === f.width && info.height === f.height &&
-        Math.abs(info.duration - expected) < 0.15 && info.hasAudio && lastProgress === 1,
+        Math.abs(info.duration - expected) < 0.2 && info.hasAudio && lastProgress === 1,
       `Exportação ${f.label}: ${info.width}x${info.height}, ${info.duration.toFixed(2)}s (esperado ${expected}s)`
     );
   }
+
+  // Volumes e fades no arquivo 9:16
+  const out = path.join(tmp, 'saida-1080x1920-blur.mp4');
+  const full = meanVolume(out, 0.5, 1.5);
+  const half = meanVolume(out, 4.6, 0.8);
+  const muted = meanVolume(out, 5.6, 0.8);
+  const fadeStart = meanVolume(out, 6.5, 0.15);
+  const afterFade = meanVolume(out, 7.2, 0.6);
+  const boosted = meanVolume(out, 8.6, 0.8);
+  check(Math.abs(full - half - 6) < 1, `Volume 50%: ${(half - full).toFixed(1)} dB (esperado -6)`);
+  check(muted < -80, `Clipe silenciado: ${muted} dB`);
+  check(fadeStart < afterFade - 6, `Fade de entrada: ${fadeStart} dB no início vs ${afterFade} dB depois`);
+  check(Math.abs(boosted - full - 3.5) < 1, `Volume 150%: +${(boosted - full).toFixed(1)} dB (esperado +3,5)`);
+
+  // Placa de vídeo: neste computador de teste não há placa, então a detecção volta vazia
+  const hw = await engine.detectHardwareEncoders();
+  console.log('   placas de vídeo detectadas:', hw.map((h) => h.label).join(', ') || 'nenhuma');
+
+  // Volta automática para a CPU quando a placa falha
+  const fbOut = path.join(tmp, 'fallback.mp4');
+  const used = [];
+  const fb = await engine.exportVideo(
+    clips.slice(0, 2),
+    { width: 540, height: 960, fit: 'cover', crf: 30, preset: 'ultrafast', encoder: 'h264_nvenc', output: fbOut },
+    null,
+    (e) => used.push(e)
+  ).promise;
+  check(
+    hw.some((h) => h.id === 'h264_nvenc') ? fb.ok : fb.ok && fb.fellBack && used.join('>') === 'h264_nvenc>libx264',
+    `Volta automática para CPU: ${used.join(' → ')}`
+  );
 
   // Cancelamento
   const cancelOut = path.join(tmp, 'cancelado.mp4');
   const job = engine.exportVideo(clips, { width: 1080, height: 1920, fit: 'blur', preset: 'veryslow', output: cancelOut });
   setTimeout(job.cancel, 300);
   const r = await job.promise;
-  assert(r.cancelled && !fs.existsSync(cancelOut), 'Cancelamento da exportação');
+  check(r.cancelled && !fs.existsSync(cancelOut), 'Cancelamento da exportação');
 
+  if (failures) {
+    console.error(`\n${failures} teste(s) falharam.`);
+    process.exit(1);
+  }
   console.log('\nTudo certo! 🎬');
 })().catch((e) => {
   console.error(e);

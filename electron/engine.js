@@ -102,10 +102,81 @@ async function thumbnail(file, atSeconds) {
 
 const n = (x) => Number(x).toFixed(3);
 
+// ---------------- Codificadores (CPU e placa de vídeo) ----------------
+
+const HW_ENCODERS = [
+  { id: 'h264_nvenc', label: 'NVIDIA' },
+  { id: 'h264_qsv', label: 'Intel' },
+  { id: 'h264_amf', label: 'AMD' },
+];
+
+let hwCache = null;
+
+/** Descobre quais codificadores de placa de vídeo funcionam neste PC (testa de verdade). */
+function detectHardwareEncoders() {
+  if (hwCache) return hwCache;
+  hwCache = (async () => {
+    if (process.env.KORTIN_NO_HW) return [];
+    const { stdout } = await runCapture(['-hide_banner', '-encoders']);
+    const working = [];
+    for (const enc of HW_ENCODERS) {
+      if (!stdout.includes(enc.id)) continue;
+      const { code } = await run([
+        '-hide_banner', '-loglevel', 'error',
+        '-f', 'lavfi', '-i', 'color=black:s=320x240:d=0.2',
+        '-frames:v', '3', ...encoderArgs(enc.id, 23, 'veryfast'), '-f', 'null', '-',
+      ]);
+      if (code === 0) working.push(enc);
+    }
+    return working;
+  })().catch(() => []);
+  return hwCache;
+}
+
+function runCapture(args) {
+  return new Promise((resolve) => {
+    const proc = spawn(FFMPEG, args, { windowsHide: true });
+    let stdout = '';
+    proc.stdout.on('data', (d) => (stdout += d.toString()));
+    proc.stderr.on('data', () => {});
+    proc.on('error', () => resolve({ code: -1, stdout }));
+    proc.on('close', (code) => resolve({ code, stdout }));
+  });
+}
+
+function encoderArgs(encoder, crf, preset) {
+  switch (encoder) {
+    case 'h264_nvenc':
+      return ['-c:v', 'h264_nvenc', '-preset', 'p5', '-rc', 'vbr', '-cq', String(crf + 1), '-b:v', '0', '-pix_fmt', 'yuv420p'];
+    case 'h264_qsv':
+      return ['-c:v', 'h264_qsv', '-preset', 'medium', '-global_quality', String(crf + 1), '-pix_fmt', 'nv12'];
+    case 'h264_amf':
+      return ['-c:v', 'h264_amf', '-quality', 'quality', '-rc', 'cqp',
+        '-qp_i', String(crf), '-qp_p', String(crf + 2), '-qp_b', String(crf + 4), '-pix_fmt', 'yuv420p'];
+    default:
+      return ['-c:v', 'libx264', '-preset', preset || 'veryfast', '-crf', String(crf), '-pix_fmt', 'yuv420p'];
+  }
+}
+
+// ---------------- Linha do tempo -> FFmpeg ----------------
+
+/** Encadeia atempo (cada um aceita 0,5x a 2x) para qualquer velocidade. */
+function atempoChain(speed) {
+  const parts = [];
+  let s = speed;
+  while (s < 0.5) { parts.push('atempo=0.5'); s /= 0.5; }
+  while (s > 2) { parts.push('atempo=2'); s /= 2; }
+  if (Math.abs(s - 1) > 1e-6) parts.push(`atempo=${s.toFixed(5)}`);
+  return parts.join(',');
+}
+
+/** Duração do clipe na linha do tempo (já com a velocidade aplicada). */
+const outDuration = (c) => (c.outPoint - c.inPoint) / (c.speed || 1);
+
 /**
  * Monta os argumentos do FFmpeg para exportar a linha do tempo.
- * clips: [{ path, inPoint, outPoint, hasAudio, volume? (0 a 2) }]
- * opts:  { width, height, fit: 'blur'|'cover'|'contain', fps, crf, preset, output }
+ * clips: [{ path, inPoint, outPoint, hasAudio, volume? (0 a 2), speed? (0,25 a 4), fadeIn?, fadeOut? }]
+ * opts:  { width, height, fit: 'blur'|'cover'|'contain', fps, crf, preset, encoder?, output }
  */
 function buildExportArgs(clips, opts) {
   if (!clips.length) throw new Error('A linha do tempo está vazia.');
@@ -120,44 +191,48 @@ function buildExportArgs(clips, opts) {
   const silentInputs = [];
 
   clips.forEach((c) => {
-    const dur = c.outPoint - c.inPoint;
-    args.push('-ss', n(c.inPoint), '-t', n(dur), '-i', c.path);
+    args.push('-ss', n(c.inPoint), '-t', n(c.outPoint - c.inPoint), '-i', c.path);
   });
 
   clips.forEach((c, i) => {
-    const dur = c.outPoint - c.inPoint;
+    const speed = c.speed || 1;
+    const srcDur = c.outPoint - c.inPoint;
+    const dur = outDuration(c);
     const src = `[${i}:v:0]`;
+    const pts = speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${speed.toFixed(5)}`;
     const tail = `setsar=1,fps=${fps},format=yuv420p,trim=duration=${n(dur)},setpts=PTS-STARTPTS[v${i}]`;
 
     if (fit === 'cover') {
-      filters.push(
-        `${src}setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},${tail}`
-      );
+      filters.push(`${src}${pts},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},${tail}`);
     } else if (fit === 'contain') {
       filters.push(
-        `${src}setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=decrease:force_divisible_by=2,` +
+        `${src}${pts},scale=${W}:${H}:force_original_aspect_ratio=decrease:force_divisible_by=2,` +
           `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,${tail}`
       );
     } else {
       // Fundo desfocado (estilo Reels/TikTok)
-      filters.push(`${src}setpts=PTS-STARTPTS,split=2[bg${i}][fg${i}]`);
+      filters.push(`${src}${pts},split=2[bg${i}][fg${i}]`);
       filters.push(
         `[bg${i}]scale=${Math.round(W / 4)}:${Math.round(H / 4)}:force_original_aspect_ratio=increase,` +
           `crop=${Math.round(W / 4)}:${Math.round(H / 4)},boxblur=10:2,scale=${W}:${H}[bgb${i}]`
       );
-      filters.push(
-        `[fg${i}]scale=${W}:${H}:force_original_aspect_ratio=decrease:force_divisible_by=2[fgs${i}]`
-      );
+      filters.push(`[fg${i}]scale=${W}:${H}:force_original_aspect_ratio=decrease:force_divisible_by=2[fgs${i}]`);
       filters.push(`[bgb${i}][fgs${i}]overlay=(W-w)/2:(H-h)/2,${tail}`);
     }
 
-    const afmt = `aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo`;
+    const afmt = 'aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo';
     const volume = c.volume ?? 1;
     if (c.hasAudio && volume > 0) {
-      const vol = volume !== 1 ? `,volume=${volume.toFixed(3)}` : '';
-      filters.push(
-        `[${i}:a:0]${afmt},asetpts=PTS-STARTPTS,atrim=0:${n(dur)},apad=whole_dur=${n(dur)}${vol}[a${i}]`
-      );
+      const chain = [afmt, 'asetpts=PTS-STARTPTS', `atrim=0:${n(srcDur)}`];
+      const tempo = atempoChain(speed);
+      if (tempo) chain.push(tempo);
+      chain.push(`apad=whole_dur=${n(dur)}`, `atrim=0:${n(dur)}`);
+      if (volume !== 1) chain.push(`volume=${volume.toFixed(3)}`);
+      const fi = Math.min(c.fadeIn || 0, dur / 2);
+      const fo = Math.min(c.fadeOut || 0, dur / 2);
+      if (fi > 0) chain.push(`afade=t=in:st=0:d=${n(fi)}`);
+      if (fo > 0) chain.push(`afade=t=out:st=${n(dur - fo)}:d=${n(fo)}`);
+      filters.push(`[${i}:a:0]${chain.join(',')}[a${i}]`);
     } else {
       silentInputs.push(dur);
       filters.push(`[${silentIndex}:a]${afmt},atrim=0:${n(dur)}[a${i}]`);
@@ -175,8 +250,7 @@ function buildExportArgs(clips, opts) {
   args.push(
     '-filter_complex', filters.join(';'),
     '-map', '[outv]', '-map', '[outa]',
-    '-c:v', 'libx264', '-preset', opts.preset || 'veryfast', '-crf', String(opts.crf ?? 20),
-    '-pix_fmt', 'yuv420p',
+    ...encoderArgs(opts.encoder || 'libx264', opts.crf ?? 20, opts.preset),
     '-c:a', 'aac', '-b:a', '192k',
     '-movflags', '+faststart',
     '-progress', 'pipe:1', '-nostats',
@@ -185,39 +259,54 @@ function buildExportArgs(clips, opts) {
   return args;
 }
 
-/** Exporta e chama onProgress(0..1). Retorna { promise, cancel }. */
-function exportVideo(clips, opts, onProgress) {
-  const total = clips.reduce((s, c) => s + (c.outPoint - c.inPoint), 0);
-  const args = buildExportArgs(clips, opts);
+/**
+ * Exporta e chama onProgress(0..1). Se a placa de vídeo falhar, refaz automaticamente na CPU.
+ * Retorna { promise, cancel }. O resultado traz { ok, output, encoder, fellBack }.
+ */
+function exportVideo(clips, opts, onProgress, onEncoder) {
+  const total = clips.reduce((s, c) => s + outDuration(c), 0);
   let proc = null;
   let cancelled = false;
-  let buffer = '';
 
-  const promise = run(args, {
-    onSpawn: (p) => (proc = p),
-    onStdout: (chunk) => {
-      buffer += chunk;
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        const m = /^out_time_(?:us|ms)=(\d+)/.exec(line.trim());
-        if (m && total > 0 && onProgress) {
-          onProgress(Math.min(1, Number(m[1]) / 1e6 / total));
+  const attempt = (encoder) => {
+    let buffer = '';
+    if (onEncoder) onEncoder(encoder);
+    return run(buildExportArgs(clips, { ...opts, encoder }), {
+      onSpawn: (p) => (proc = p),
+      onStdout: (chunk) => {
+        buffer += chunk;
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          const m = /^out_time_(?:us|ms)=(\d+)/.exec(line.trim());
+          if (m && total > 0 && onProgress) onProgress(Math.min(1, Number(m[1]) / 1e6 / total));
         }
-      }
-    },
-  }).then(({ code, stderr }) => {
+      },
+    });
+  };
+
+  const promise = (async () => {
+    const wanted = opts.encoder || 'libx264';
+    let encoder = wanted;
+    let res = await attempt(encoder);
+    let fellBack = false;
+    if (!cancelled && res.code !== 0 && encoder !== 'libx264') {
+      fellBack = true;
+      encoder = 'libx264';
+      if (onProgress) onProgress(0);
+      res = await attempt(encoder);
+    }
     if (cancelled) {
       try { fs.unlinkSync(opts.output); } catch {}
       return { cancelled: true };
     }
-    if (code !== 0) {
-      const lastLines = stderr.trim().split('\n').slice(-6).join('\n');
-      throw new Error(`Falha na exportação (código ${code}).\n${lastLines}`);
+    if (res.code !== 0) {
+      const lastLines = res.stderr.trim().split('\n').slice(-6).join('\n');
+      throw new Error(`Falha na exportação (código ${res.code}).\n${lastLines}`);
     }
     if (onProgress) onProgress(1);
-    return { ok: true, output: opts.output };
-  });
+    return { ok: true, output: opts.output, encoder, fellBack };
+  })();
 
   return {
     promise,
@@ -228,4 +317,50 @@ function exportVideo(clips, opts, onProgress) {
   };
 }
 
-module.exports = { FFMPEG, probe, parseProbe, thumbnail, buildExportArgs, exportVideo };
+// ---------------- Onda sonora ----------------
+
+/**
+ * Lê o áudio e devolve os picos (0 a 255) em `perSecond` pontos por segundo.
+ * Retorna [] se o vídeo não tiver áudio.
+ */
+function audioPeaks(file, perSecond = 50) {
+  const rate = 8000;
+  const win = Math.round(rate / perSecond);
+  return new Promise((resolve) => {
+    const proc = spawn(
+      FFMPEG,
+      ['-hide_banner', '-loglevel', 'error', '-i', file, '-vn', '-ac', '1', '-ar', String(rate), '-f', 's16le', '-'],
+      { windowsHide: true }
+    );
+    const peaks = [];
+    let count = 0;
+    let max = 0;
+    let leftover = null;
+    proc.stdout.on('data', (chunk) => {
+      let buf = leftover ? Buffer.concat([leftover, chunk]) : chunk;
+      const usable = buf.length - (buf.length % 2);
+      for (let i = 0; i < usable; i += 2) {
+        const v = Math.abs(buf.readInt16LE(i));
+        if (v > max) max = v;
+        if (++count === win) {
+          // raiz quadrada realça falas baixas sem estourar as altas
+          peaks.push(Math.min(255, Math.round(Math.sqrt(max / 32768) * 255)));
+          count = 0;
+          max = 0;
+        }
+      }
+      leftover = usable < buf.length ? buf.subarray(usable) : null;
+    });
+    proc.stderr.on('data', () => {});
+    proc.on('error', () => resolve([]));
+    proc.on('close', () => {
+      if (count > 0) peaks.push(Math.min(255, Math.round(Math.sqrt(max / 32768) * 255)));
+      resolve(peaks);
+    });
+  });
+}
+
+module.exports = {
+  FFMPEG, HW_ENCODERS, probe, parseProbe, thumbnail, buildExportArgs, exportVideo,
+  detectHardwareEncoders, encoderArgs, atempoChain, outDuration, audioPeaks,
+};
