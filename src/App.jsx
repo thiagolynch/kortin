@@ -4,14 +4,24 @@ import Timeline from './components/Timeline';
 import MediaBin from './components/MediaBin';
 import Inspector from './components/Inspector';
 import ExportDialog from './components/ExportDialog';
-import { Icon } from './components/Icons';
+import { Icon, Logo } from './components/Icons';
 import { usePlayer } from './lib/usePlayer';
 import {
-  ASPECTS, FITS, buildSegments, cleanError, formatTime, locate, mediaToClip, splitAt, totalOf,
+  ASPECTS, FITS, baseName, buildSegments, cleanError, formatTime, locate, mediaToClip,
+  restoreClips, serializeProject, splitAt, totalOf, uid,
 } from './lib/timeline';
 
 const HISTORY_LIMIT = 100;
-const hasBridge = typeof window !== 'undefined' && !!window.klipo;
+const AUTOSAVE_DELAY = 1500;
+const hasBridge = typeof window !== 'undefined' && !!window.kortin;
+const isProjectFile = (p) => /\.kortin$/i.test(p);
+
+function formatWhen(ms) {
+  const d = new Date(ms);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  const hour = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return sameDay ? `hoje às ${hour}` : `${d.toLocaleDateString('pt-BR')} às ${hour}`;
+}
 
 export default function App() {
   const [media, setMedia] = useState([]);
@@ -24,6 +34,11 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [exporting, setExporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [projectPath, setProjectPath] = useState(null);
+  const [savedJson, setSavedJson] = useState(() =>
+    JSON.stringify(serializeProject({ clips: [], aspect: '9:16', fit: 'blur' }))
+  );
+  const [recovery, setRecovery] = useState(null);
 
   // ---------- Histórico (desfazer / refazer) ----------
   const clipsRef = useRef(clips);
@@ -36,6 +51,11 @@ export default function App() {
     h.past.push(clipsRef.current);
     if (h.past.length > HISTORY_LIMIT) h.past.shift();
     h.future = [];
+    forceHistory((n) => n + 1);
+  }, []);
+
+  const resetHistory = useCallback(() => {
+    history.current = { past: [], future: [] };
     forceHistory((n) => n + 1);
   }, []);
 
@@ -69,48 +89,173 @@ export default function App() {
   const selectedSegment = segments.find((s) => s.clip.id === selectedId) || null;
   const currentClip = locate(segments, player.time)?.seg.clip || null;
 
+  const toastTimer = useRef(0);
   const showToast = useCallback((msg) => {
     setToast(msg);
-    clearTimeout(showToast.t);
-    showToast.t = setTimeout(() => setToast(''), 3500);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(''), 4000);
   }, []);
 
+  // ---------- Estado do projeto (salvo / não salvo) ----------
+  const projectData = useMemo(() => serializeProject({ clips, aspect, fit }), [clips, aspect, fit]);
+  const projectJson = useMemo(() => JSON.stringify(projectData), [projectData]);
+  const dirty = projectJson !== savedJson;
+  const projectName = projectPath ? baseName(projectPath) : 'Sem título';
+
+  useEffect(() => {
+    if (!hasBridge) return;
+    window.kortin.setDirty(dirty, `${dirty ? '• ' : ''}${projectName} — Kortin`);
+  }, [dirty, projectName]);
+
+  // Recuperação automática: guarda o projeto enquanto você edita
+  useEffect(() => {
+    if (!hasBridge) return;
+    if (!dirty || !clips.length) return;
+    const t = setTimeout(() => {
+      window.kortin.autosaveWrite({ ...projectData, _path: projectPath });
+    }, AUTOSAVE_DELAY);
+    return () => clearTimeout(t);
+  }, [projectJson, dirty, clips.length, projectData, projectPath]);
+
+  const confirmDiscard = useCallback(() => {
+    if (!dirty) return true;
+    return window.confirm('Você tem alterações não salvas neste projeto. Deseja descartá-las?');
+  }, [dirty]);
+
   // ---------- Importação ----------
-  const importPaths = useCallback(async (paths) => {
-    if (!paths?.length) return;
-    const added = [];
+  const probeAll = useCallback(async (paths) => {
+    const ok = [];
     const errors = [];
     for (let i = 0; i < paths.length; i++) {
       setBusy(`Lendo ${i + 1} de ${paths.length}…`);
       try {
-        added.push(await window.klipo.probe(paths[i]));
+        ok.push(await window.kortin.probe(paths[i]));
       } catch (err) {
-        const name = paths[i].split(/[\\/]/).pop();
-        errors.push(`${name}: ${cleanError(err)}`);
+        errors.push({ path: paths[i], message: cleanError(err) });
       }
     }
     setBusy('');
-    if (added.length) {
-      setMedia((m) => [...m, ...added.filter((a) => !m.some((x) => x.path === a.path))]);
-      const newClips = added.map(mediaToClip);
+    return { ok, errors };
+  }, []);
+
+  const importPaths = useCallback(async (paths) => {
+    if (!paths?.length) return;
+    const { ok, errors } = await probeAll(paths);
+    if (ok.length) {
+      setMedia((m) => [...m, ...ok.filter((a) => !m.some((x) => x.path === a.path))]);
+      const newClips = ok.map(mediaToClip);
       commit([...clipsRef.current, ...newClips]);
       setSelectedId(newClips[newClips.length - 1].id);
     }
-    if (errors.length) showToast(`Não foi possível importar: ${errors.join(' · ')}`);
-  }, [commit, showToast]);
+    if (errors.length) {
+      showToast(`Não foi possível importar: ${errors.map((e) => `${baseName(e.path)} (${e.message})`).join(' · ')}`);
+    }
+  }, [commit, probeAll, showToast]);
 
   const openImport = useCallback(async () => {
-    if (!hasBridge) return;
-    importPaths(await window.klipo.openVideos());
+    importPaths(await window.kortin.openVideos());
   }, [importPaths]);
-
-  useEffect(() => (hasBridge ? window.klipo.onOpenFiles(importPaths) : undefined), [importPaths]);
 
   const addFromBin = useCallback((m) => {
     const clip = mediaToClip(m);
     commit([...clipsRef.current, clip]);
     setSelectedId(clip.id);
   }, [commit]);
+
+  // ---------- Projetos ----------
+  const loadProject = useCallback(async (data, path, { recovered = false } = {}) => {
+    player.pause();
+    const paths = [...new Set(data.clips.map((c) => c.path))];
+    const { ok, errors } = await probeAll(paths);
+    const infoByPath = Object.fromEntries(ok.map((i) => [i.path, i]));
+    const restored = restoreClips(data.clips, infoByPath);
+    const nextAspect = ASPECTS[data.aspect] ? data.aspect : '9:16';
+    const nextFit = FITS[data.fit] ? data.fit : 'blur';
+
+    setMedia(ok);
+    setClipsRaw(restored);
+    setAspect(nextAspect);
+    setFit(nextFit);
+    setSelectedId(restored[0]?.id || null);
+    resetHistory();
+    player.seek(0);
+
+    if (recovered) {
+      setProjectPath(data._path || null);
+      setSavedJson('');
+    } else {
+      setProjectPath(path);
+      setSavedJson(JSON.stringify(serializeProject({ clips: restored, aspect: nextAspect, fit: nextFit })));
+    }
+
+    if (errors.length) {
+      showToast(
+        `${errors.length} vídeo(s) não foram encontrados e ficaram de fora: ${errors.map((e) => baseName(e.path)).join(', ')}`
+      );
+    } else {
+      showToast(recovered ? 'Projeto recuperado.' : `Projeto "${baseName(path)}" aberto.`);
+    }
+  }, [player, probeAll, resetHistory, showToast]);
+
+  const openProject = useCallback(async (filePath) => {
+    if (!confirmDiscard()) return;
+    try {
+      const res = await window.kortin.openProject(filePath);
+      if (res) {
+        setRecovery(null);
+        await loadProject(res.data, res.path);
+      }
+    } catch (err) {
+      showToast(`Não foi possível abrir o projeto: ${cleanError(err)}`);
+    }
+  }, [confirmDiscard, loadProject, showToast]);
+
+  const saveProject = useCallback(async (saveAs = false) => {
+    try {
+      const file = await window.kortin.saveProject(projectData, projectPath, saveAs);
+      if (!file) return;
+      setProjectPath(file);
+      setSavedJson(projectJson);
+      window.kortin.autosaveClear();
+      showToast(`Projeto salvo em ${baseName(file)}.kortin`);
+    } catch (err) {
+      showToast(`Não foi possível salvar: ${cleanError(err)}`);
+    }
+  }, [projectData, projectJson, projectPath, showToast]);
+
+  const newProject = useCallback(() => {
+    if (!confirmDiscard()) return;
+    player.pause();
+    setMedia([]);
+    setClipsRaw([]);
+    setSelectedId(null);
+    setProjectPath(null);
+    resetHistory();
+    player.seek(0);
+    setSavedJson(JSON.stringify(serializeProject({ clips: [], aspect, fit })));
+    window.kortin.autosaveClear();
+  }, [aspect, confirmDiscard, fit, player, resetHistory]);
+
+  const openPaths = useCallback((paths) => {
+    const project = paths.find(isProjectFile);
+    if (project) return openProject(project);
+    return importPaths(paths);
+  }, [importPaths, openProject]);
+
+  // Ao abrir: arquivos passados pelo Windows ou projeto para recuperar
+  const started = useRef(false);
+  useEffect(() => {
+    if (!hasBridge || started.current) return;
+    started.current = true;
+    (async () => {
+      const files = await window.kortin.pendingFiles();
+      if (files.length) return openPaths(files);
+      const saved = await window.kortin.autosaveRead();
+      if (saved?.data?.clips?.length) setRecovery(saved);
+    })();
+  }, [openPaths]);
+
+  useEffect(() => (hasBridge ? window.kortin.onOpenFiles(openPaths) : undefined), [openPaths]);
 
   // ---------- Edição ----------
   const split = useCallback(() => {
@@ -130,6 +275,17 @@ export default function App() {
     setSelectedId(next[Math.min(idx, next.length - 1)]?.id || null);
   }, [commit, selectedId]);
 
+  const duplicateSelected = useCallback(() => {
+    const list = clipsRef.current;
+    const idx = list.findIndex((c) => c.id === selectedId);
+    if (idx < 0) return;
+    const copy = { ...list[idx], id: uid() };
+    const next = [...list];
+    next.splice(idx + 1, 0, copy);
+    commit(next);
+    setSelectedId(copy.id);
+  }, [commit, selectedId]);
+
   const updateClip = useCallback((id, patch, record = true) => {
     const next = clipsRef.current.map((c) => (c.id === id ? { ...c, ...patch } : c));
     record ? commit(next) : setClipsRaw(next);
@@ -147,16 +303,25 @@ export default function App() {
 
   // ---------- Atalhos de teclado ----------
   const keys = useRef({});
-  keys.current = { player, split, removeSelected, undo, redo };
+  keys.current = { player, split, removeSelected, duplicateSelected, undo, redo, saveProject, openProject, newProject };
   useEffect(() => {
     const onKey = (e) => {
-      if (e.target.closest('input, select, textarea') || exporting) return;
+      if (exporting) return;
       const k = keys.current;
       const ctrl = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+
+      // atalhos de arquivo funcionam em qualquer lugar
+      if (ctrl && key === 's') { e.preventDefault(); return k.saveProject(e.shiftKey); }
+      if (ctrl && key === 'o') { e.preventDefault(); return k.openProject(); }
+      if (ctrl && key === 'n') { e.preventDefault(); return k.newProject(); }
+
+      if (e.target.closest?.('input, select, textarea')) return;
       if (e.code === 'Space') { e.preventDefault(); k.player.toggle(); }
-      else if (ctrl && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); k.undo(); }
-      else if (ctrl && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); k.redo(); }
-      else if (!ctrl && e.key.toLowerCase() === 's') { e.preventDefault(); k.split(); }
+      else if (ctrl && key === 'z' && !e.shiftKey) { e.preventDefault(); k.undo(); }
+      else if (ctrl && (key === 'y' || (e.shiftKey && key === 'z'))) { e.preventDefault(); k.redo(); }
+      else if (ctrl && key === 'd') { e.preventDefault(); k.duplicateSelected(); }
+      else if (!ctrl && key === 's') { e.preventDefault(); k.split(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); k.removeSelected(); }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
@@ -180,15 +345,15 @@ export default function App() {
     if (!e.dataTransfer.types.includes('Files')) return;
     e.preventDefault();
     setDragOver(false);
-    const paths = [...e.dataTransfer.files].map((f) => window.klipo.pathForFile(f)).filter(Boolean);
-    importPaths(paths);
+    const paths = [...e.dataTransfer.files].map((f) => window.kortin.pathForFile(f)).filter(Boolean);
+    openPaths(paths);
   };
 
   if (!hasBridge) {
     return (
       <div className="no-bridge">
-        <h1>Klipo</h1>
-        <p>Esta interface precisa rodar dentro do app. Use <code>npm run dev</code> para abrir o Klipo.</p>
+        <h1>Kortin</h1>
+        <p>Esta interface precisa rodar dentro do app. Use <code>npm run dev</code> para abrir o Kortin.</p>
       </div>
     );
   }
@@ -203,10 +368,21 @@ export default function App() {
       onDrop={onWindowDrop}
     >
       <header className="topbar">
-        <div className="brand">
-          <div className="logo"><Icon.Film width={16} height={16} /></div>
-          <span>Klipo</span>
-          <em>beta</em>
+        <div className="topbar-left">
+          <div className="brand">
+            <Logo size={28} />
+            <span>Kortin</span>
+          </div>
+          <span className="divider" />
+          <div className="project-name" title={projectPath || 'Projeto ainda não salvo'}>
+            {projectName}
+            {dirty && <span className="dirty-dot" title="Alterações não salvas" />}
+          </div>
+          <div className="file-actions">
+            <button className="icon-btn" onClick={newProject} title="Novo projeto (Ctrl+N)"><Icon.File /></button>
+            <button className="icon-btn" onClick={() => openProject()} title="Abrir projeto (Ctrl+O)"><Icon.Open /></button>
+            <button className="icon-btn" onClick={() => saveProject(false)} title="Salvar projeto (Ctrl+S)"><Icon.Save /></button>
+          </div>
         </div>
 
         <div className="topbar-center">
@@ -234,14 +410,34 @@ export default function App() {
 
       <main className="workspace">
         <MediaBin media={media} busy={busy} onImport={openImport} onAdd={addFromBin} />
-        <Preview
-          player={player}
-          aspect={aspect}
-          fit={fit}
-          currentClip={currentClip}
-          empty={!clips.length}
-          onImport={openImport}
-        />
+        <div className="stage">
+          {recovery && (
+            <div className="recovery">
+              <div>
+                <strong>Encontramos um projeto não salvo</strong>
+                <span>
+                  {recovery.data._path ? `"${baseName(recovery.data._path)}", ` : ''}
+                  {recovery.data.clips.length} clipe(s), editado {formatWhen(recovery.savedAt)}
+                </span>
+              </div>
+              <button className="btn ghost sm" onClick={() => { setRecovery(null); window.kortin.autosaveClear(); }}>
+                Descartar
+              </button>
+              <button className="btn primary sm" onClick={() => { const r = recovery; setRecovery(null); loadProject(r.data, null, { recovered: true }); }}>
+                Recuperar
+              </button>
+            </div>
+          )}
+          <Preview
+            player={player}
+            aspect={aspect}
+            fit={fit}
+            currentClip={currentClip}
+            empty={!clips.length}
+            onImport={openImport}
+            onOpenProject={() => openProject()}
+          />
+        </div>
         <Inspector
           clip={selectedClip}
           segment={selectedSegment}
@@ -249,8 +445,11 @@ export default function App() {
           onSetIn={(t) => updateClip(selectedId, { inPoint: t })}
           onSetOut={(t) => updateClip(selectedId, { outPoint: t })}
           onSplit={split}
+          onDuplicate={duplicateSelected}
           onDelete={removeSelected}
           onReset={() => updateClip(selectedId, { inPoint: 0, outPoint: selectedClip.duration })}
+          onVolumeStart={snapshot}
+          onVolume={(v) => updateClip(selectedId, { volume: v }, false)}
         />
       </main>
 
@@ -261,6 +460,7 @@ export default function App() {
             <button className="icon-btn" onClick={redo} disabled={!h.future.length} title="Refazer (Ctrl+Y)"><Icon.Redo /></button>
             <span className="divider" />
             <button className="icon-btn" onClick={split} disabled={!clips.length} title="Dividir no cursor (S)"><Icon.Split /></button>
+            <button className="icon-btn" onClick={duplicateSelected} disabled={!selectedId} title="Duplicar clipe (Ctrl+D)"><Icon.Copy /></button>
             <button className="icon-btn" onClick={removeSelected} disabled={!selectedId} title="Excluir clipe (Delete)"><Icon.Trash /></button>
           </div>
 
@@ -282,7 +482,6 @@ export default function App() {
               step={1}
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value))}
-              onKeyDown={(e) => e.stopPropagation()}
             />
           </div>
         </div>
@@ -306,9 +505,15 @@ export default function App() {
       {dragOver && <div className="drop-overlay"><div>Solte para importar</div></div>}
       {toast && <div className="toast">{toast}</div>}
       {exporting && (
-        <ExportDialog clips={clips} total={total} aspect={aspect} fit={fit} onClose={() => setExporting(false)} />
+        <ExportDialog
+          clips={clips}
+          total={total}
+          aspect={aspect}
+          fit={fit}
+          projectName={projectPath ? projectName : null}
+          onClose={() => setExporting(false)}
+        />
       )}
     </div>
   );
 }
-

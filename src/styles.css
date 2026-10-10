@@ -45,16 +45,15 @@ button { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
+.topbar-left { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; letter-spacing: 0.2px; }
-.brand em {
-  font-style: normal; font-size: 10px; font-weight: 600; color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  padding: 1px 6px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.6px;
+.project-name {
+  display: flex; align-items: center; gap: 7px; color: #c6cad6; font-weight: 500;
+  max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.logo {
-  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink);
-}
+.dirty-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+.file-actions { display: flex; gap: 2px; margin-left: 4px; }
+.file-actions .icon-btn { width: 30px; height: 30px; }
 .topbar-center { display: flex; gap: 10px; align-items: center; }
 .topbar-right { display: flex; gap: 8px; justify-content: flex-end; }
 
@@ -133,6 +132,16 @@ button { font: inherit; color: inherit; }
 .bin-name { font-size: 11.5px; color: #c6cad6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- Preview ---------- */
+.stage { position: relative; min-width: 0; min-height: 0; display: grid; }
+.recovery {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 12px;
+  background: var(--panel-2); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-2));
+  box-shadow: 0 14px 40px #000a; white-space: nowrap;
+}
+.recovery > div { display: flex; flex-direction: column; margin-right: 8px; }
+.recovery span { color: var(--muted); font-size: 12px; }
+.export-promise { margin: 16px 0 0; color: #9be7f3; font-size: 12px; }
 .preview {
   display: grid; place-items: center; padding: 22px; min-width: 0; min-height: 0;
   background: radial-gradient(ellipse at center, #15171d 0%, var(--bg) 70%);
@@ -146,10 +155,22 @@ button { font: inherit; color: inherit; }
 .frame-video.fit-cover { object-fit: cover; }
 .frame-video.fit-contain, .frame-video.fit-blur { object-fit: contain; }
 .frame-empty {
-  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center;
+  position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; text-align: center;
   background: repeating-linear-gradient(45deg, #111318, #111318 12px, #13151b 12px, #13151b 24px);
-  border: 0; cursor: pointer; padding: 16px; color: var(--text);
+  padding: 16px;
 }
+.frame-empty-main {
+  display: grid; justify-items: center; gap: 8px; background: none; border: 0; cursor: pointer; color: var(--text); padding: 8px;
+}
+.frame-empty-main:hover .frame-empty-icon { transform: scale(1.06); }
+.frame-empty-icon { transition: transform .15s; }
+.link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.promise { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.promise li {
+  font-size: 11px; color: #b7bccb; border: 1px solid var(--line-2); background: #0e0f13cc;
+  border-radius: 99px; padding: 3px 9px;
+}
+.promise li::before { content: '✓ '; color: var(--accent); }
 .frame-empty-icon {
   width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; font-size: 26px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); margin-bottom: 6px;
@@ -158,6 +179,7 @@ button { font: inherit; color: inherit; }
 
 /* ---------- Inspector ---------- */
 .inspector-body { padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.inspector-body > * { flex-shrink: 0; }
 .inspector-empty { padding: 16px 14px; color: var(--muted); overflow-y: auto; }
 .inspector-empty p { margin: 0 0 18px; }
 .insp-thumb { aspect-ratio: 16 / 9; border-radius: 8px; background: #0b0c10 center / cover no-repeat; border: 1px solid var(--line-2); }
@@ -168,11 +190,17 @@ button { font: inherit; color: inherit; }
 .insp-grid label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
 .insp-grid span { font-family: var(--mono); font-size: 13px; }
 .insp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
-.insp-actions .btn:last-child { grid-column: 1 / -1; }
+.insp-volume { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.insp-volume-head { display: flex; justify-content: space-between; align-items: center; }
+.insp-volume-head label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+.insp-volume-head span { font-family: var(--mono); font-size: 12px; }
+.insp-volume-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.insp-volume-row input { flex: 1; width: auto; }
+.icon-btn.active { color: var(--danger); }
 .insp-hint { margin: 0; color: var(--muted); font-size: 12px; }
 .shortcuts h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
-.shortcuts dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; margin: 0; }
-.shortcuts dt { font-family: var(--mono); font-size: 11px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 1px 6px; justify-self: start; }
+.shortcuts dl { display: grid; grid-template-columns: max-content 1fr; gap: 7px 10px; margin: 0; align-items: center; }
+.shortcuts dt { font-family: var(--mono); font-size: 11px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 1px 6px; justify-self: start; white-space: nowrap; }
 .shortcuts dd { margin: 0; color: #b7bccb; }
 
 /* ---------- Barra de ferramentas ---------- */

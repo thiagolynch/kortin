@@ -13,6 +13,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const VIDEO_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'wmv', 'mts', 'm2ts', '3gp'];
+const PROJECT_EXT = 'kortin';
 const MIME = {
   '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
   '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.3gp': 'video/3gpp',
@@ -22,6 +23,32 @@ const MIME = {
 const allowedFiles = new Set();
 let mainWindow = null;
 let currentExport = null;
+let isDirty = false;
+let pendingOpen = [];
+
+const autosavePath = () => path.join(app.getPath('userData'), 'recuperacao.kortin');
+
+// ---------- Uma única janela: "Abrir com Kortin" reaproveita o app aberto ----------
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_e, argv) => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    const files = filesFromArgv(argv);
+    if (files.length) mainWindow.webContents.send('app:openFiles', files);
+  });
+}
+
+function filesFromArgv(argv) {
+  const exts = [...VIDEO_EXT, PROJECT_EXT];
+  return argv
+    .slice(1)
+    .filter((a) => !a.startsWith('-') && exts.includes(path.extname(a).slice(1).toLowerCase()))
+    .map((a) => path.resolve(a))
+    .filter((a) => fs.existsSync(a));
+}
 
 function registerMediaProtocol() {
   protocol.handle('media', async (request) => {
@@ -66,21 +93,14 @@ function registerMediaProtocol() {
   });
 }
 
-function filesFromArgv(argv) {
-  return argv
-    .slice(1)
-    .filter((a) => !a.startsWith('-') && VIDEO_EXT.includes(path.extname(a).slice(1).toLowerCase()))
-    .map((a) => path.resolve(a))
-    .filter((a) => fs.existsSync(a));
-}
-
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 700,
-    title: 'Klipo',
+    title: 'Kortin',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     backgroundColor: '#0e0f13',
     autoHideMenuBar: true,
     webPreferences: {
@@ -97,10 +117,25 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // "Abrir com Klipo": vídeos passados na linha de comando entram no projeto
-  mainWindow.webContents.once('did-finish-load', () => {
-    const files = filesFromArgv(process.argv);
-    if (files.length) mainWindow.webContents.send('app:openFiles', files);
+  // Arquivos passados ao abrir ("Abrir com Kortin" ou duplo clique em um .kortin)
+  pendingOpen = filesFromArgv(process.argv);
+
+  // Aviso ao fechar com alterações não salvas
+  mainWindow.on('close', (e) => {
+    if (!isDirty) {
+      try { fs.unlinkSync(autosavePath()); } catch {}
+      return;
+    }
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'question',
+      buttons: ['Voltar ao projeto', 'Sair mesmo assim'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Projeto não salvo',
+      message: 'Você tem alterações não salvas.',
+      detail: 'Se sair agora, o Kortin vai oferecer a recuperação deste projeto na próxima vez que abrir.',
+    });
+    if (choice === 0) e.preventDefault();
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -110,7 +145,7 @@ function createWindow() {
   }
 }
 
-// ---------- IPC ----------
+// ---------- Mídia ----------
 
 ipcMain.handle('dialog:openVideos', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
@@ -134,10 +169,85 @@ ipcMain.handle('media:probe', async (_e, filePath) => {
   return { ...info, path: filePath, name: path.basename(filePath), thumb };
 });
 
+// ---------- Projetos ----------
+
+function readProject(file) {
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (data?.app !== 'kortin' || !Array.isArray(data.clips)) {
+    throw new Error('Este arquivo não é um projeto do Kortin.');
+  }
+  return data;
+}
+
+ipcMain.handle('project:open', async (_e, filePath) => {
+  let file = filePath;
+  if (!file) {
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Abrir projeto',
+      properties: ['openFile'],
+      filters: [{ name: 'Projeto Kortin', extensions: [PROJECT_EXT] }],
+    });
+    if (res.canceled) return null;
+    file = res.filePaths[0];
+  }
+  return { path: file, data: readProject(file) };
+});
+
+ipcMain.handle('project:save', async (_e, { data, filePath, saveAs }) => {
+  let file = filePath;
+  if (!file || saveAs) {
+    const res = await dialog.showSaveDialog(mainWindow, {
+      title: 'Salvar projeto',
+      defaultPath: file || path.join(app.getPath('documents'), 'Meu projeto.kortin'),
+      filters: [{ name: 'Projeto Kortin', extensions: [PROJECT_EXT] }],
+    });
+    if (res.canceled) return null;
+    file = res.filePath;
+  }
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(tmp, file); // grava em duas etapas para nunca corromper o arquivo
+  return file;
+});
+
+ipcMain.handle('autosave:write', (_e, data) => {
+  try {
+    const tmp = `${autosavePath()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
+    fs.renameSync(tmp, autosavePath());
+  } catch {}
+});
+
+ipcMain.handle('autosave:read', () => {
+  try {
+    const stat = fs.statSync(autosavePath());
+    return { savedAt: stat.mtimeMs, data: readProject(autosavePath()) };
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('autosave:clear', () => {
+  try { fs.unlinkSync(autosavePath()); } catch {}
+});
+
+ipcMain.on('app:dirty', (_e, dirty, title) => {
+  isDirty = !!dirty;
+  if (mainWindow && title) mainWindow.setTitle(title);
+});
+
+ipcMain.handle('app:pendingFiles', () => {
+  const files = pendingOpen;
+  pendingOpen = [];
+  return files;
+});
+
+// ---------- Exportação ----------
+
 ipcMain.handle('dialog:saveExport', async (_e, suggestedName) => {
   const res = await dialog.showSaveDialog(mainWindow, {
     title: 'Exportar vídeo',
-    defaultPath: path.join(app.getPath('videos'), suggestedName || 'klipo-video.mp4'),
+    defaultPath: path.join(app.getPath('videos'), suggestedName || 'kortin-video.mp4'),
     filters: [{ name: 'Vídeo MP4', extensions: ['mp4'] }],
   });
   return res.canceled ? null : res.filePath;

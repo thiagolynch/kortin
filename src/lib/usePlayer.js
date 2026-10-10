@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clamp, locate, mediaUrl, totalOf } from './timeline';
 
+function applyVolume(v, clip) {
+  if (!v) return;
+  const vol = clamp(clip.volume ?? 1, 0, 1);
+  v.volume = vol;
+  v.muted = vol === 0;
+}
+
 /**
  * Toca a linha do tempo inteira num único <video>, trocando de clipe quando
  * o atual chega ao ponto de saída.
@@ -30,6 +37,7 @@ export function usePlayer(segments) {
     }
     const loc = locate(segs, t);
     st.current.index = loc.index;
+    applyVolume(v, loc.seg.clip);
     const src = mediaUrl(loc.seg.clip.path);
     if (v.getAttribute('src') !== src) {
       st.current.pending = { local: loc.local, play: andPlay };
@@ -116,6 +124,7 @@ export function usePlayer(segments) {
     if (t !== timeRef.current) setTime(t);
     if (!st.current.playing) load(t, false);
     else if (!segments.length) pause();
+    else if (segments[st.current.index]) applyVolume(videoRef.current, segments[st.current.index].clip);
   }, [segments, load, pause]);
 
   useEffect(() => () => cancelAnimationFrame(st.current.raf), []);

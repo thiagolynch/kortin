@@ -47,9 +47,10 @@ function assert(cond, msg) {
   const clips = [
     { path: horizontal, inPoint: 1, outPoint: 3.5, hasAudio: true },
     { path: vertical, inPoint: 0.5, outPoint: 2.5, hasAudio: false },
-    { path: horizontal, inPoint: 4, outPoint: 5, hasAudio: true },
+    { path: horizontal, inPoint: 4, outPoint: 5, hasAudio: true, volume: 0.5 },
+    { path: horizontal, inPoint: 0, outPoint: 1, hasAudio: true, volume: 0 },
   ];
-  const expected = 2.5 + 2 + 1;
+  const expected = 2.5 + 2 + 1 + 1;
 
   const formats = [
     { label: '9:16 desfoque', width: 1080, height: 1920, fit: 'blur' },
