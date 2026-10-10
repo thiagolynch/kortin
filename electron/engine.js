@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const captions = require('./captions');
 
 function getFfmpegPath() {
   if (process.env.KORTIN_FFMPEG) return process.env.KORTIN_FFMPEG;
@@ -23,9 +24,9 @@ function getFfmpegPath() {
 
 const FFMPEG = getFfmpegPath();
 
-function run(args, { onStdout, onSpawn } = {}) {
+function run(args, { onStdout, onSpawn, cwd } = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(FFMPEG, args, { windowsHide: true });
+    const proc = spawn(FFMPEG, args, { windowsHide: true, cwd });
     if (onSpawn) onSpawn(proc);
     let stderr = '';
     proc.stderr.on('data', (d) => {
@@ -227,6 +228,7 @@ function buildExportArgs(clips, opts) {
       const tempo = atempoChain(speed);
       if (tempo) chain.push(tempo);
       chain.push(`apad=whole_dur=${n(dur)}`, `atrim=0:${n(dur)}`);
+      if (c.denoise) chain.push('afftdn=nf=-25'); // limpeza de ruído de fundo
       if (volume !== 1) chain.push(`volume=${volume.toFixed(3)}`);
       const fi = Math.min(c.fadeIn || 0, dur / 2);
       const fo = Math.min(c.fadeOut || 0, dur / 2);
@@ -245,7 +247,9 @@ function buildExportArgs(clips, opts) {
   });
 
   const concatInputs = clips.map((_, i) => `[v${i}][a${i}]`).join('');
-  filters.push(`${concatInputs}concat=n=${clips.length}:v=1:a=1[outv][outa]`);
+  filters.push(`${concatInputs}concat=n=${clips.length}:v=1:a=1[outv0][outa]`);
+  // Legenda queimada no vídeo (o .ass é preparado em exportVideo)
+  filters.push(opts.captionFilter ? `[outv0]${opts.captionFilter}[outv]` : '[outv0]null[outv]');
 
   args.push(
     '-filter_complex', filters.join(';'),
@@ -267,11 +271,18 @@ function exportVideo(clips, opts, onProgress, onEncoder) {
   const total = clips.reduce((s, c) => s + outDuration(c), 0);
   let proc = null;
   let cancelled = false;
+  let workDir;
+  let captionFilter = null;
+  if (opts.captions?.cues?.length) {
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kortin-exp-'));
+    captionFilter = captions.prepareCaptionDir(workDir, opts.captions.cues, opts.captions.settings || {}, opts.width, opts.height);
+  }
 
   const attempt = (encoder) => {
     let buffer = '';
     if (onEncoder) onEncoder(encoder);
-    return run(buildExportArgs(clips, { ...opts, encoder }), {
+    return run(buildExportArgs(clips, { ...opts, encoder, captionFilter }), {
+      cwd: workDir,
       onSpawn: (p) => (proc = p),
       onStdout: (chunk) => {
         buffer += chunk;
@@ -286,26 +297,30 @@ function exportVideo(clips, opts, onProgress, onEncoder) {
   };
 
   const promise = (async () => {
-    const wanted = opts.encoder || 'libx264';
-    let encoder = wanted;
-    let res = await attempt(encoder);
-    let fellBack = false;
-    if (!cancelled && res.code !== 0 && encoder !== 'libx264') {
-      fellBack = true;
-      encoder = 'libx264';
-      if (onProgress) onProgress(0);
-      res = await attempt(encoder);
+    try {
+      const wanted = opts.encoder || 'libx264';
+      let encoder = wanted;
+      let res = await attempt(encoder);
+      let fellBack = false;
+      if (!cancelled && res.code !== 0 && encoder !== 'libx264') {
+        fellBack = true;
+        encoder = 'libx264';
+        if (onProgress) onProgress(0);
+        res = await attempt(encoder);
+      }
+      if (cancelled) {
+        try { fs.unlinkSync(opts.output); } catch {}
+        return { cancelled: true };
+      }
+      if (res.code !== 0) {
+        const lastLines = res.stderr.trim().split('\n').slice(-6).join('\n');
+        throw new Error(`Falha na exportação (código ${res.code}).\n${lastLines}`);
+      }
+      if (onProgress) onProgress(1);
+      return { ok: true, output: opts.output, encoder, fellBack };
+    } finally {
+      if (workDir) fs.rmSync(workDir, { recursive: true, force: true });
     }
-    if (cancelled) {
-      try { fs.unlinkSync(opts.output); } catch {}
-      return { cancelled: true };
-    }
-    if (res.code !== 0) {
-      const lastLines = res.stderr.trim().split('\n').slice(-6).join('\n');
-      throw new Error(`Falha na exportação (código ${res.code}).\n${lastLines}`);
-    }
-    if (onProgress) onProgress(1);
-    return { ok: true, output: opts.output, encoder, fellBack };
   })();
 
   return {

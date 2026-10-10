@@ -3,9 +3,9 @@ import { Icon } from './Icons';
 
 export default function MediaBin({ media, busy, onImport, onAdd }) {
   return (
-    <aside className="panel bin">
-      <div className="panel-head">
-        <span>Mídia</span>
+    <>
+      <div className="panel-subhead">
+        <span>{media.length ? `${media.length} arquivo(s)` : 'Nenhum arquivo'}</span>
         <button className="btn ghost sm" onClick={onImport} disabled={!!busy}>
           <Icon.Import width={15} height={15} /> Importar
         </button>
@@ -39,6 +39,6 @@ export default function MediaBin({ media, busy, onImport, onAdd }) {
           ))}
         </div>
       )}
-    </aside>
+    </>
   );
 }

@@ -5,7 +5,7 @@ Editor de vídeo para Windows, simples e rápido, pensado para vídeos curtos (R
 **A promessa:** sem anúncios, sem marca d'água e sem cobrar para você salvar o seu próprio vídeo.
 Tudo roda no seu computador, então exportar é sempre grátis e o app funciona offline.
 
-> **Status:** v0.2 (polimento) pronta para testes. Próximo: módulo 2, voz e legenda.
+> **Status:** v0.3 (legenda automática e limpeza da fala) pronta para testes. Próximo: módulo 3, corte com IA.
 
 ## O que já funciona (Módulo 1)
 
@@ -19,6 +19,15 @@ Tudo roda no seu computador, então exportar é sempre grátis e o app funciona 
 - **Onda sonora** em cada clipe e **ímã** que gruda cortes e cursor nas emendas (`N` liga/desliga, `Alt` arrasta sem ímã)
 - **Desfazer / refazer** (`Ctrl+Z` / `Ctrl+Y`)
 - **Preview** em tempo real da sequência inteira
+
+**Legenda automática (IA no seu PC, sem créditos e sem internet)**
+- Transcreve a fala em **português**, inglês ou espanhol com o whisper.cpp, palavra por palavra
+- Três modelos: **Rápido** (148 MB), **Preciso** (488 MB) e **Máximo** (574 MB), baixados uma única vez
+- Estilos **Clássica, Destaque** (palavra da vez em amarelo), **Caixa** e **Neon**, com tamanho, altura e maiúsculas
+- A legenda **acompanha os cortes**: dividir, reordenar ou mudar a velocidade não desalinha nada
+- **Editar o texto** de cada legenda (duplo clique) e legenda **queimada no vídeo** na exportação
+- **Limpar a fala:** corta pausas longas e vícios ("é", "ãh", "hum"; "né" e "tipo" opcionais), com desfazer
+- **Reduzir ruído de fundo** por clipe (aplicado na exportação)
 
 **Projetos (seu trabalho nunca se perde)**
 - **Salvar e abrir projetos** `.kortin` (`Ctrl+S`, `Ctrl+Shift+S`, `Ctrl+O`, `Ctrl+N`)
@@ -45,7 +54,7 @@ Tudo roda no seu computador, então exportar é sempre grátis e o app funciona 
 |---|---|
 | 1 | Editor base ✅ |
 | 1.5 | Polimento: onda sonora, ímã, velocidade, fades, fila e formatos múltiplos ✅ |
-| 2 | Legenda automática em português (Whisper rodando no próprio PC) |
+| 2 | Legenda automática em português (Whisper rodando no próprio PC) ✅ |
 | 3 | Corte com IA: vídeo bruto entra, corte pronto sai |
 | 4 | Textos, música, transições, filtros e templates |
 
@@ -56,14 +65,17 @@ Tudo roda no seu computador, então exportar é sempre grátis e o app funciona 
 Pré-requisitos: [Node.js 22 LTS](https://nodejs.org) e [Git](https://git-scm.com).
 
 ```bash
-npm install      # instala tudo (inclui o FFmpeg e o Electron)
-npm run dev      # abre o Kortin em modo desenvolvimento
+npm install            # instala tudo (inclui o FFmpeg e o Electron)
+npm run setup:whisper  # compila a IA de legenda (uma vez; precisa de git e cmake,
+                       # no Windows do "Visual Studio Build Tools" com C++)
+npm run dev            # abre o Kortin em modo desenvolvimento
 ```
 
 Outros comandos:
 
 ```bash
 npm run test:engine   # testa o motor de vídeo (gera vídeos de teste e exporta)
+npm run test:whisper  # baixa o modelo "tiny" e testa a legenda de ponta a ponta
 npm run dist          # gera o .exe na pasta release/
 ```
 
@@ -72,7 +84,7 @@ npm run dist          # gera o .exe na pasta release/
 1. Crie um repositório novo no GitHub (ex.: `kortin`).
 2. Na pasta do projeto:
    ```bash
-   git remote add origin https://github.com/SEU-USUARIO/kortin.git
+   git remote add origin https://github.com/thiagolynch/kortin.git
    git push -u origin main
    ```
 3. Para lançar uma versão de teste:
@@ -89,7 +101,7 @@ npm run dist          # gera o .exe na pasta release/
 
 ## Ativar a atualização automática
 
-1. No `package.json`, troque `SEU-USUARIO-GITHUB` pelo seu usuário do GitHub (em `build.publish`).
+1. Já configurada para `github.com/thiagolynch/kortin` (em `build.publish` no `package.json`).
 2. O repositório precisa ser **público** (ou o app não consegue ler as versões).
 3. A cada nova tag (`v0.2.0`, `v0.3.0`…), o GitHub publica o instalador, o `latest.yml` e o `.blockmap`.
    Quem tem o Kortin **instalado** recebe a versão nova sozinho e vê o aviso "Reiniciar e atualizar".
@@ -102,6 +114,8 @@ electron/
   main.js       → janela, diálogos, protocolo de mídia e exportação
   preload.js    → ponte segura entre a interface e o sistema
   engine.js     → motor de vídeo (FFmpeg): leitura, miniaturas, exportação
+  transcribe.js → legenda automática com whisper.cpp (download do modelo, transcrição)
+  captions.js   → gera o arquivo .ass que queima a legenda no vídeo
 src/
   App.jsx       → estado do editor, projetos, recuperação, histórico e atalhos
   components/   → Preview, Linha do tempo, Mídia, Propriedades, Exportação, Fila, Boas-vindas
@@ -116,6 +130,9 @@ build/icon.png  → ícone do app
 Electron · React · Vite · FFmpeg (via `ffmpeg-static`) · electron-builder
 
 ## Licenças
+
+A fonte Montserrat (legendas) é distribuída sob a SIL Open Font License (`assets/fonts/OFL-Montserrat.txt`).
+O whisper.cpp é MIT; os modelos do Whisper (OpenAI) também são MIT.
 
 O FFmpeg incluído é distribuído sob a licença GPL. Antes de vender o app ou fechar o código,
 vale revisar essa questão (dá para trocar por um build LGPL do FFmpeg).

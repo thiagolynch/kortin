@@ -141,6 +141,16 @@ export default function Inspector({
           />
         </div>
 
+        <label className={`switch insp-switch${clip.hasAudio ? '' : ' disabled'}`} title="Remove chiado e barulho constante de fundo. Aplicado na exportação.">
+          <input
+            type="checkbox"
+            checked={!!clip.denoise}
+            disabled={!clip.hasAudio}
+            onChange={(e) => { onChangeStart(); onChange({ denoise: e.target.checked }); }}
+          />
+          <span>Reduzir ruído de fundo <small className="muted">(na exportação)</small></span>
+        </label>
+
         <div className="insp-actions">
           <button className="btn" disabled={!canIn} onClick={() => onSetIn(localTime)} title="O clipe passa a começar onde está o cursor">
             [ Início aqui
@@ -153,7 +163,7 @@ export default function Inspector({
           <button
             className="btn"
             onClick={onReset}
-            disabled={clip.inPoint === 0 && clip.outPoint === clip.duration && speed === 1 && !clip.fadeIn && !clip.fadeOut && (clip.volume ?? 1) === 1}
+            disabled={clip.inPoint === 0 && clip.outPoint === clip.duration && speed === 1 && !clip.fadeIn && !clip.fadeOut && (clip.volume ?? 1) === 1 && !clip.denoise}
             title="Volta o clipe ao original: sem cortes, velocidade 1x, volume 100%"
           >
             Restaurar

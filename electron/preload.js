@@ -20,6 +20,15 @@ contextBridge.exposeInMainWorld('kortin', {
     }
   },
 
+  // legenda automática
+  captionsStatus: () => ipcRenderer.invoke('captions:status'),
+  downloadModel: (key) => ipcRenderer.invoke('captions:download', key),
+  cancelDownload: () => ipcRenderer.invoke('captions:cancel-download'),
+  onDownloadProgress: listen('captions:download-progress'),
+  transcribe: (filePath, model, language) => ipcRenderer.invoke('captions:transcribe', { filePath, model, language }),
+  cancelTranscribe: () => ipcRenderer.invoke('captions:cancel'),
+  onTranscribeProgress: listen('captions:progress'),
+
   // projetos
   openProject: (filePath) => ipcRenderer.invoke('project:open', filePath),
   saveProject: (data, filePath, saveAs) => ipcRenderer.invoke('project:save', { data, filePath, saveAs }),

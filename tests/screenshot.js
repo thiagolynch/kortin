@@ -8,21 +8,51 @@ const fs = require('fs');
 const electron = require('electron');
 const { app, BrowserWindow, dialog } = electron;
 
-const mode = process.argv.includes('recuperar') ? 'recuperar' : 'editar';
+const mode = process.argv.includes('recuperar') ? 'recuperar' : process.argv.includes('legenda') ? 'legenda' : 'editar';
 const outDir = process.argv[process.argv.length - 1];
 const tmp = path.join(__dirname, 'tmp');
 const exportDir = path.join(tmp, 'exportados');
 app.setPath('userData', path.join(tmp, 'userdata'));
 
-if (mode === 'editar') {
+if (mode === 'editar' || mode === 'legenda') {
   process.argv.push(path.join(tmp, 'horizontal.mp4'), path.join(tmp, 'vertical-sem-audio.mp4'));
   fs.rmSync(exportDir, { recursive: true, force: true });
   fs.mkdirSync(exportDir, { recursive: true });
   // a janela de "escolher pasta" é do Windows; no teste ela responde sozinha
   dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [exportDir] });
+  dialog.showSaveDialog = async (_w, o) => ({ canceled: false, filePath: path.join(exportDir, path.basename((o || _w).defaultPath)) });
 }
 
 require('../electron/main.js');
+
+// No modo "legenda", a IA é simulada com uma transcrição fixa (o modelo real é testado em tests/../scripts/test-whisper.mjs)
+if (mode === 'legenda') {
+  const { ipcMain } = electron;
+  const fake = [
+    [0.3, 0.7, 'Olá,'], [0.75, 1.0, 'é,'], [1.05, 1.35, 'tudo'], [1.4, 1.8, 'bem?'],
+    [2.9, 3.2, 'Hoje'], [3.25, 3.4, 'eu'], [3.45, 3.7, 'vou'], [3.75, 4.2, 'mostrar'], [4.25, 4.4, 'o'], [4.45, 4.9, 'Kortin.'],
+    [5.0, 5.3, 'Hum,'], [5.35, 5.6, 'muito'], [5.62, 5.95, 'fácil!'],
+  ].map(([s, e, w]) => ({ s, e, w }));
+  app.whenReady().then(() => {
+    ipcMain.removeHandler('captions:status');
+    ipcMain.handle('captions:status', () => ({
+      available: true,
+      models: {
+        rapido: { label: 'Rápido', sizeMB: 148, installed: true, hint: 'Bom para fala clara, roda em qualquer PC' },
+        preciso: { label: 'Preciso', sizeMB: 488, installed: false, hint: 'Acerta mais nomes e gírias' },
+        maximo: { label: 'Máximo', sizeMB: 574, installed: false, hint: 'O mais preciso' },
+      },
+    }));
+    ipcMain.removeHandler('captions:transcribe');
+    ipcMain.handle('captions:transcribe', async (event, { filePath, model, language }) => {
+      for (const p of [0.2, 0.6, 1]) {
+        event.sender.send('captions:progress', { filePath, p });
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return { words: fake, model, language };
+    });
+  });
+}
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -94,6 +124,57 @@ app.whenReady().then(async () => {
     const queue = await js(`return [...document.querySelectorAll('.queue-item')].map(x => x.innerText.replace(/\\n/g, ' | '));`);
     console.log('fila:', JSON.stringify(queue));
     console.log('arquivos exportados:', fs.readdirSync(exportDir).join(', '));
+  } else if (mode === 'legenda') {
+    await click('.welcome button', 'Explorar primeiro');
+    await wait(2000);
+    await click('.panel-tabs button', 'Legendas');
+    await wait(500);
+    await shot(win, 'kortin-legenda-vazia');
+    await click('.cap-card .btn.primary', 'Gerar');
+    await wait(2000);
+    const r1 = await js(`
+      return {
+        cues: document.querySelectorAll('.cap-item').length,
+        texts: [...document.querySelectorAll('.cap-text')].map(x => x.textContent),
+        lane: document.querySelectorAll('.tl-cue').length,
+        cleanup: [...document.querySelectorAll('.cap-card .btn.sm')].map(b => b.textContent.trim()).find(t => t.includes('corte')),
+      };
+    `);
+    console.log('legendas:', JSON.stringify(r1));
+    // posiciona em 1,5 s para ver a legenda com destaque na palavra
+    await js(`document.querySelectorAll('.cap-item')[0].click(); await wait(200);`);
+    await js(`
+      const ruler = document.querySelector('.tl-ruler'); const r = ruler.getBoundingClientRect();
+      ruler.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: r.left + 16 + 1.5 * 40, clientY: r.top + 5, button: 0 }));
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); await wait(400);
+    `);
+    await shot(win, 'kortin-legenda');
+    // edita a primeira legenda
+    const edited = await js(`
+      document.querySelectorAll('.cap-edit')[0].click(); await wait(150);
+      const inp = document.querySelector('.cap-input');
+      inp.value = 'Oi, tudo bem?'; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.blur(); await wait(300);
+      return document.querySelectorAll('.cap-text')[0].textContent;
+    `);
+    console.log('editada:', edited);
+    // limpa a fala
+    const before = await js(`return document.querySelector('.timecode').textContent;`);
+    await click('.cap-card .btn.sm', 'Aplicar');
+    await wait(400);
+    const after = await js(`return { time: document.querySelector('.timecode').textContent, clips: document.querySelectorAll('.tl-clip').length, cues: document.querySelectorAll('.cap-item').length };`);
+    console.log('limpeza:', before, '→', JSON.stringify(after));
+    await shot(win, 'kortin-legenda-limpa');
+    // exporta com legenda
+    await click('.topbar-right .btn.primary', 'Exportar');
+    await shot(win, 'kortin-exportar-legenda');
+    await click('.modal .btn.primary', 'exportar');
+    for (let i = 0; i < 60; i++) {
+      const pending = await js(`return document.querySelectorAll('.queue-item.running, .queue-item.queued').length || (document.querySelector('.queue-pill')?.textContent.includes('Exportando') ? 1 : 0);`);
+      if (!pending) break;
+      await wait(1000);
+    }
+    await wait(500);
+    console.log('exportados:', fs.readdirSync(exportDir).join(', '));
   } else {
     const banner = await js(`return document.querySelector('.recovery')?.innerText || null;`);
     console.log('banner:', JSON.stringify(banner));

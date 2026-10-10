@@ -26,8 +26,24 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Reaproveitar a IA de legenda já compilada
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/whisper
+            vendor-src
+          key: whisper-${{ runner.os }}-${{ hashFiles('scripts/build-whisper.mjs') }}
+
+      - name: Compilar a IA de legenda (whisper.cpp)
+        shell: bash
+        run: |
+          if [ ! -f vendor/whisper/win/fast/whisper-cli.exe ]; then npm run setup:whisper; fi
+
       - name: Testar o motor de vídeo
         run: npm run test:engine
+
+      - name: Testar a legenda de ponta a ponta
+        run: npm run test:whisper
 
       - name: Gerar o instalador e a versão portátil
         run: npm run dist

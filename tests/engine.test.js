@@ -103,6 +103,24 @@ function check(cond, msg) {
   check(fadeStart < afterFade - 6, `Fade de entrada: ${fadeStart} dB no início vs ${afterFade} dB depois`);
   check(Math.abs(boosted - full - 3.5) < 1, `Volume 150%: +${(boosted - full).toFixed(1)} dB (esperado +3,5)`);
 
+  // Legendas queimadas no vídeo (todas as variações de estilo)
+  const cues = [
+    { start: 0.2, end: 2.0, words: [
+      { start: 0.2, end: 0.6, text: 'Olá,' }, { start: 0.6, end: 1.0, text: 'tudo' },
+      { start: 1.0, end: 1.4, text: 'bem?' }, { start: 1.4, end: 2.0, text: 'Bora editar!' }] },
+    { start: 2.2, end: 4.0, words: [
+      { start: 2.2, end: 2.8, text: 'Sem' }, { start: 2.8, end: 3.4, text: 'marca' }, { start: 3.4, end: 4.0, text: "d'água" }] },
+  ];
+  for (const [style, f] of [['destaque', formats[0]], ['caixa', formats[1]], ['classica', formats[2]], ['neon', formats[0]]]) {
+    const out = path.join(tmp, `legenda-${style}.mp4`);
+    const res = await engine.exportVideo(clips.slice(0, 2), {
+      ...f, crf: 28, preset: 'ultrafast', output: out,
+      captions: { cues, settings: { style, position: 0.72, size: 'm' } },
+    }).promise;
+    spawnSync(engine.FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', '-ss', '1.2', '-i', out, '-frames:v', '1', '-vf', 'scale=-2:480', path.join(tmp, `legenda-${style}.png`)]);
+    check(res.ok && fs.existsSync(path.join(tmp, `legenda-${style}.png`)), `Legenda queimada: estilo ${style} (${f.label})`);
+  }
+
   // Placa de vídeo: neste computador de teste não há placa, então a detecção volta vazia
   const hw = await engine.detectHardwareEncoders();
   console.log('   placas de vídeo detectadas:', hw.map((h) => h.label).join(', ') || 'nenhuma');
