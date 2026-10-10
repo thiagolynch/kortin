@@ -87,14 +87,11 @@ npm run dist          # gera o .exe na pasta release/
    git remote add origin https://github.com/thiagolynch/kortin.git
    git push -u origin main
    ```
-3. Para lançar uma versão de teste:
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-4. Em alguns minutos, a aba **Actions** gera os arquivos e eles aparecem em **Releases**:
-   - `Kortin-Instalador-0.1.0.exe`: instala no PC
-   - `Kortin-Portatil-0.1.0.exe`: roda sem instalar (bom para testes)
+3. Para lançar uma versão nova, aumente o `"version"` no `package.json` (ex.: `0.3.0` → `0.4.0`) e envie para a `main`.
+   O GitHub testa, gera os arquivos e publica a versão sozinho, sem precisar criar tag.
+4. Em uns 15 a 20 minutos, a aba **Actions** termina e os arquivos aparecem em **Releases**:
+   - `Kortin-Instalador-0.3.0.exe`: instala no PC
+   - `Kortin-Portatil-0.3.0.exe`: roda sem instalar (bom para testes)
 
 > Como o app ainda não tem certificado de assinatura digital, o Windows pode mostrar
 > "O Windows protegeu o computador". Basta clicar em **Mais informações → Executar assim mesmo**.
@@ -103,7 +100,7 @@ npm run dist          # gera o .exe na pasta release/
 
 1. Já configurada para `github.com/thiagolynch/kortin` (em `build.publish` no `package.json`).
 2. O repositório precisa ser **público** (ou o app não consegue ler as versões).
-3. A cada nova tag (`v0.2.0`, `v0.3.0`…), o GitHub publica o instalador, o `latest.yml` e o `.blockmap`.
+3. A cada versão nova publicada, o GitHub sobe o instalador, o `latest.yml` e o `.blockmap`.
    Quem tem o Kortin **instalado** recebe a versão nova sozinho e vê o aviso "Reiniciar e atualizar".
    A versão **portátil** não se atualiza sozinha: baixe a nova em Releases.
 
