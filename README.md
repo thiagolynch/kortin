@@ -1,141 +1,161 @@
-# Kortin ✂️
+<div align="center">
 
-Editor de vídeo para Windows, simples e rápido, pensado para vídeos curtos (Reels, TikTok, Shorts).
+<img src="build/icon.png" width="96" alt="Logo do Kortin" />
 
-**A promessa:** sem anúncios, sem marca d'água e sem cobrar para você salvar o seu próprio vídeo.
-Tudo roda no seu computador, então exportar é sempre grátis e o app funciona offline.
+# Kortin
 
-> **Status:** v0.3 (legenda automática e limpeza da fala) pronta para testes. Próximo: módulo 3, corte com IA.
+**O editor de vídeo sem pegadinhas, para quem produz vídeo curto.**<br/>
+Sem anúncios, sem marca d'água, sem assinatura para salvar o seu próprio vídeo.<br/>
+Legenda automática e cortes com IA que rodam **no seu computador** — nada vai para a nuvem.
 
-## O que já funciona (Módulo 1)
+[![Última versão](https://img.shields.io/github/v/release/thiagolynch/kortin?label=vers%C3%A3o&color=22d3ee)](https://github.com/thiagolynch/kortin/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/thiagolynch/kortin/build-windows.yml?branch=main&label=build)](https://github.com/thiagolynch/kortin/actions)
+![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
+![Offline](https://img.shields.io/badge/IA-100%25%20local-a78bfa)
 
-**Edição**
-- **Importar vídeos** pelo botão ou arrastando os arquivos para a janela (MP4, MOV, MKV, WEBM, AVI…)
-- **Linha do tempo** com miniaturas, régua, zoom (`Ctrl + roda do mouse`) e cursor arrastável
-- **Cortar** pelas alças laterais do clipe ou pelos botões "Início aqui" / "Fim aqui"
-- **Dividir** (`S`), **duplicar** (`Ctrl+D`), **excluir** (`Delete`) e **reordenar** arrastando os clipes
-- **Volume por clipe até 200%**, botão de silenciar e **fade** de entrada e saída
-- **Velocidade do clipe** de 0,25x a 4x (o áudio acompanha sem mudar o tom da voz)
-- **Onda sonora** em cada clipe e **ímã** que gruda cortes e cursor nas emendas (`N` liga/desliga, `Alt` arrasta sem ímã)
-- **Desfazer / refazer** (`Ctrl+Z` / `Ctrl+Y`)
-- **Preview** em tempo real da sequência inteira
+**[⬇️ Baixar para Windows](https://github.com/thiagolynch/kortin/releases/latest)** · [Novidades](CHANGELOG.md) · [Arquitetura](docs/ARQUITETURA.md)
 
-**Legenda automática (IA no seu PC, sem créditos e sem internet)**
-- Transcreve a fala em **português**, inglês ou espanhol com o whisper.cpp, palavra por palavra
-- Três modelos: **Rápido** (148 MB), **Preciso** (488 MB) e **Máximo** (574 MB), baixados uma única vez
-- Estilos **Clássica, Destaque** (palavra da vez em amarelo), **Caixa** e **Neon**, com tamanho, altura e maiúsculas
-- A legenda **acompanha os cortes**: dividir, reordenar ou mudar a velocidade não desalinha nada
-- **Editar o texto** de cada legenda (duplo clique) e legenda **queimada no vídeo** na exportação
-- **Limpar a fala:** corta pausas longas e vícios ("é", "ãh", "hum"; "né" e "tipo" opcionais), com desfazer
-- **Reduzir ruído de fundo** por clipe (aplicado na exportação)
+<img src="docs/img/editor.webp" alt="Editor do Kortin com linha do tempo, onda sonora e música de fundo" width="900" />
 
-**Projetos (seu trabalho nunca se perde)**
-- **Salvar e abrir projetos** `.kortin` (`Ctrl+S`, `Ctrl+Shift+S`, `Ctrl+O`, `Ctrl+N`)
-- **Recuperação automática:** o projeto é guardado enquanto você edita. Se o PC desligar ou o app fechar,
-  na próxima abertura o Kortin oferece recuperar tudo
-- **Aviso ao fechar** com alterações não salvas
-- **Abrir com o Kortin:** duplo clique em um `.kortin` ou "Abrir com" em um vídeo
-
-**Exportação**
-- **Em segundo plano:** continue editando enquanto exporta; aviso do Windows quando o vídeo fica pronto
-- **Vários formatos de uma vez:** marque 9:16, 16:9, 1:1 e 4:5 e o Kortin gera todos
-- **Placa de vídeo** (NVIDIA, Intel ou AMD) detectada automaticamente; se falhar, refaz pelo processador
-- **Formatos:** 9:16, 16:9, 1:1 e 4:5
-- **Enquadramento:** fundo desfocado (estilo Reels), preencher (corta as bordas) ou ajustar (barras pretas)
-- **MP4** (H.264 + AAC) em 1080p, 30 fps, com barra de progresso e cancelamento
-
-**Primeiros passos e atualizações**
-- **Boas-vindas** na primeira abertura: a promessa do app, escolha do formato e importação, sem cadastro
-- **Atualização automática** na versão instalada (veja "Ativar a atualização automática" abaixo)
-
-## Roteiro
-
-| Módulo | Entrega |
-|---|---|
-| 1 | Editor base ✅ |
-| 1.5 | Polimento: onda sonora, ímã, velocidade, fades, fila e formatos múltiplos ✅ |
-| 2 | Legenda automática em português (Whisper rodando no próprio PC) ✅ |
-| 3 | Corte com IA: vídeo bruto entra, corte pronto sai |
-| 4 | Textos, música, transições, filtros e templates |
+</div>
 
 ---
 
-## Como rodar no seu computador
+## Os compromissos do Kortin
 
-Pré-requisitos: [Node.js 22 LTS](https://nodejs.org) e [Git](https://git-scm.com).
+- 🚫 **Nunca coloca marca d'água** no seu vídeo.
+- 🆓 **Exportar é sempre grátis**, em qualquer formato e na qualidade máxima.
+- 🔒 **Seus vídeos não saem do seu PC**: edição, legenda e cortes com IA rodam localmente.
+- 📴 **Funciona offline** e sem limite de uso da legenda automática — sem créditos.
+- 🙅 **Sem cadastro** e sem anúncios.
+
+## Recursos
+
+### ✂️ Edição rápida
+- Importar arrastando ou pelo botão (MP4, MOV, MKV, WEBM, AVI…)
+- Linha do tempo com miniaturas, **onda sonora**, zoom (`Ctrl` + roda) e **ímã** que gruda nas emendas
+- Cortar pelas alças, **dividir** (`S`), duplicar, excluir e reordenar arrastando
+- **Velocidade** de 0,25x a 4x (o áudio acompanha sem mudar o tom), **volume até 200%** e fades
+- **Desfazer/refazer de tudo** — cada arrasto vira um único passo
+- Formatos **9:16, 16:9, 1:1 e 4:5** com fundo desfocado, preencher ou ajustar
+
+### 💬 Legenda automática (IA no seu PC)
+<img src="docs/img/legendas-e-cortes.webp" alt="Legendas com destaque palavra a palavra e revisão de cortes sugeridos" width="760" />
+
+- Transcrição palavra por palavra em **português**, inglês e espanhol (whisper.cpp)
+- 3 modelos — Rápido, Preciso e Máximo — baixados **uma vez**, com assinatura SHA-256 conferida
+- Estilos **Clássica, Destaque** (palavra da vez colorida), **Caixa** e **Neon**; tamanho, altura e maiúsculas
+- A legenda **acompanha os cortes** e é queimada no vídeo na exportação; texto editável
+
+### 🤖 Cortes sugeridos — o Kortin sugere, você decide
+- **Pausas** (com limite ajustável), **vícios** ("é", "ãh", "hum"; "né" e "tipo" opcionais) e **frases reiniciadas** ("hoje eu vou… hoje eu vou mostrar")
+- Cada sugestão mostra **o motivo**, aparece **marcada na linha do tempo** e pode ser **ouvida** antes
+- Aceite ou rejeite uma por uma (`A` / `R` / `O` para ouvir) e aplique tudo de uma vez — `Ctrl+Z` desfaz
+
+### 🎵 Música de fundo com abaixamento automático
+- Escolha ou arraste um MP3/WAV/M4A: ela **repete até o fim** do vídeo, com fade de entrada e saída
+- **Abaixa sozinha quando alguém fala** (cerca de −12 dB) e volta nas pausas — sem desenhar curva de volume
+
+### 📦 Exportação sem limites
+<img src="docs/img/exportar.webp" alt="Exportação em vários formatos ao mesmo tempo" width="640" />
+
+- **Vários formatos de uma vez** (ex.: Reels 9:16 + YouTube 16:9), em **segundo plano**
+- **Placa de vídeo** NVIDIA, Intel ou AMD detectada sozinha; se falhar, refaz pelo processador
+- Projetos grandes (centenas de clipes) exportados **em partes**, com memória sob controle
+- MP4 H.264 + AAC em 1080p — **sem marca d'água**
+
+### 🛟 Seu trabalho não se perde
+<img src="docs/img/arquivos-nao-encontrados.webp" alt="Tela de arquivos não encontrados" width="640" />
+
+- **Recuperação automática** enquanto você edita (queda de energia, travou, fechou sem querer)
+- Projetos **portáteis**: mude a pasta de lugar ou abra em outro PC — o Kortin acha os vídeos; o que não achar, você localiza ou manda procurar numa pasta
+- Atualização automática na versão instalada
+
+## Baixar e instalar
+
+1. Abra a página de **[versões](https://github.com/thiagolynch/kortin/releases/latest)** e baixe:
+   - `Kortin-Instalador-x.y.z.exe` — instala e se atualiza sozinho (recomendado)
+   - `Kortin-Portatil-x.y.z.exe` — roda sem instalar
+2. O app ainda não tem certificado de assinatura, então o Windows pode mostrar *"O Windows protegeu o computador"*: clique em **Mais informações → Executar assim mesmo**.
+
+**Requisitos:** Windows 10 ou 11 (64 bits). A legenda automática roda em qualquer processador; com processador recente, os modelos maiores ficam mais rápidos.
+
+## Atalhos
+
+| Tecla | Ação | Tecla | Ação |
+|---|---|---|---|
+| `Espaço` | Play / pausa | `Ctrl+Z` / `Ctrl+Y` | Desfazer / refazer |
+| `S` | Dividir no cursor | `Ctrl+S` / `Ctrl+Shift+S` | Salvar / salvar como |
+| `Delete` | Excluir clipe | `Ctrl+O` / `Ctrl+N` | Abrir / novo projeto |
+| `Ctrl+D` | Duplicar clipe | `←` `→` | 1 quadro (`Shift`: 1 segundo) |
+| `N` | Liga/desliga o ímã | `Alt` + arrastar | Sem ímã |
+| `A` / `R` / `O` | Aceitar / rejeitar / ouvir corte sugerido | `Ctrl` + roda | Zoom na timeline |
+
+## Privacidade e segurança
+
+- **Nada sai do seu computador**: vídeo, áudio e transcrições são processados localmente. A internet só é usada para baixar os modelos de IA (uma vez) e as atualizações.
+- A interface roda isolada (sandbox, CSP, sem acesso direto ao sistema); o app só lê e grava arquivos que **você** escolheu, recusa caminhos de rede e valida tudo antes de chegar ao FFmpeg.
+- Modelos de IA baixados de uma **versão fixa** e conferidos por **SHA-256**; arquivo adulterado é apagado.
+- Detalhes em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+
+## Roteiro
+
+| Versão | Entrega | Status |
+|---|---|---|
+| 0.1–0.2 | Editor base, onda sonora, ímã, velocidade, fades, fila e vários formatos | ✅ |
+| 0.3 | Legenda automática local | ✅ |
+| 0.4 | Refatoração: segurança, desempenho e testes | ✅ |
+| 0.5 | Projetos portáteis, cache, modelos verificados, licenças | ✅ |
+| **0.6** | **Cortes sugeridos e música de fundo com abaixamento** | ✅ |
+| próximas | Beta fechado · textos e títulos · transições · brand kit e templates · lote para agências | 🔜 |
+
+Histórico completo no [CHANGELOG](CHANGELOG.md).
+
+---
+
+## Para desenvolvedores
+
+Pré-requisitos: [Node.js 22 LTS](https://nodejs.org) e [Git](https://git-scm.com). Para compilar a IA de legenda: CMake e, no Windows, Visual Studio Build Tools com C++.
 
 ```bash
-npm install            # instala tudo (inclui o FFmpeg e o Electron)
-npm run setup:whisper  # compila a IA de legenda (uma vez; precisa de git e cmake,
-                       # no Windows do "Visual Studio Build Tools" com C++)
+npm install            # dependências (inclui FFmpeg e Electron)
+npm run setup:whisper  # compila o whisper.cpp (uma vez)
 npm run dev            # abre o Kortin em modo desenvolvimento
 ```
 
-Outros comandos:
+| Comando | O que faz |
+|---|---|
+| `npm test` | testes de unidade/propriedade + motor de vídeo |
+| `npm run test:unit` | 73 testes (timeline, legendas, cortes, música, segurança com fuzz, FFmpeg) |
+| `npm run test:engine` | exporta vídeos reais e mede o resultado (formatos, áudio, legendas, música, 160 clipes) |
+| `npm run test:whisper` | legenda de ponta a ponta com o modelo tiny |
+| `npm run verify:models` | confere os SHA-256 dos modelos contra o servidor |
+| `npx electron tests/screenshot.js editar\|legenda\|recuperar\|mover <pasta>` | roteiros na interface, com prints |
+| `npm run dist` | gera o instalador em `release/` |
 
-```bash
-npm run test:engine   # testa o motor de vídeo (gera vídeos de teste e exporta)
-npm run test:whisper  # baixa o modelo "tiny" e testa a legenda de ponta a ponta
-npm run dist          # gera o .exe na pasta release/
-```
-
-## Como publicar no GitHub e gerar o .exe automaticamente
-
-1. Crie um repositório novo no GitHub (ex.: `kortin`).
-2. Na pasta do projeto:
-   ```bash
-   git remote add origin https://github.com/thiagolynch/kortin.git
-   git push -u origin main
-   ```
-3. Para lançar uma versão nova, aumente o `"version"` no `package.json` (ex.: `0.3.0` → `0.4.0`) e envie para a `main`.
-   O GitHub testa, gera os arquivos e publica a versão sozinho, sem precisar criar tag.
-4. Em uns 15 a 20 minutos, a aba **Actions** termina e os arquivos aparecem em **Releases**:
-   - `Kortin-Instalador-0.3.0.exe`: instala no PC
-   - `Kortin-Portatil-0.3.0.exe`: roda sem instalar (bom para testes)
-
-> Como o app ainda não tem certificado de assinatura digital, o Windows pode mostrar
-> "O Windows protegeu o computador". Basta clicar em **Mais informações → Executar assim mesmo**.
-
-## Ativar a atualização automática
-
-1. Já configurada para `github.com/thiagolynch/kortin` (em `build.publish` no `package.json`).
-2. O repositório precisa ser **público** (ou o app não consegue ler as versões).
-3. A cada versão nova publicada, o GitHub sobe o instalador, o `latest.yml` e o `.blockmap`.
-   Quem tem o Kortin **instalado** recebe a versão nova sozinho e vê o aviso "Reiniciar e atualizar".
-   A versão **portátil** não se atualiza sozinha: baixe a nova em Releases.
-
-## Estrutura do projeto
+**Publicar uma versão:** aumente `"version"` no `package.json`, descreva a versão no [CHANGELOG](CHANGELOG.md) e envie para a `main`. O GitHub Actions testa no Windows, gera os `.exe` e publica em Releases com as notas do CHANGELOG — quem tem o app instalado recebe a atualização.
 
 ```
-electron/
-  main.js       → janela, diálogos, protocolo de mídia e exportação
-  preload.js    → ponte segura entre a interface e o sistema
-  engine.js     → motor de vídeo (FFmpeg): leitura, miniaturas, exportação
-  transcribe.js → legenda automática com whisper.cpp (download do modelo, transcrição)
-  captions.js   → gera o arquivo .ass que queima a legenda no vídeo
-src/
-  App.jsx       → estado do editor, projetos, recuperação, histórico e atalhos
-  components/   → Preview, Linha do tempo, Mídia, Propriedades, Exportação, Fila, Boas-vindas
-  lib/          → regras da linha do tempo e o player da sequência
-tests/          → teste do motor de vídeo e roteiro visual da interface
-build/icon.png  → ícone do app
-.github/workflows/build-windows.yml → gera o .exe no GitHub
+electron/        processo principal (confiável)
+  core/          segurança (autorizações, validadores) e log
+  ipc/           canais da interface: só validam e despacham
+  services/      FFmpeg, legenda (whisper), projetos, cache, protocolo de mídia
+src/             interface React (não confiável, isolada)
+  state/         documento com desfazer + cursor fora do React
+  hooks/         projeto, mídia, música, fila, atalhos
+  lib/           regras puras: timeline, legendas, cortes sugeridos
+  components/    telas
+shared/          constantes usadas pelos dois lados
+tests/           unidade, motor de vídeo e roteiros de interface
+licenses/        licenças de terceiros (vão no instalador)
 ```
-
-## Tecnologias
-
-Electron · React · Vite · FFmpeg (via `ffmpeg-static`) · electron-builder
 
 ## Licenças
 
-Os componentes de terceiros e suas licenças estão em [`licenses/`](licenses/) e vão dentro do
-instalador (no app: tela de boas-vindas → "Licenças de terceiros").
+Os componentes de terceiros e suas licenças estão em [`licenses/`](licenses/) e vão dentro do instalador (no app: tela de boas-vindas → "Licenças de terceiros").
 
-- **FFmpeg** (Windows: 6.1.1 "essentials" de gyan.dev) é **GPL v3** e roda como processo separado,
-  sem modificações. A GPL não impede vender o Kortin; exige acompanhar o texto da licença e oferecer
-  o código-fonte do FFmpeg — ambos estão em `licenses/AVISOS-DE-TERCEIROS.txt`
-  (regenerado a cada build por `npm run notices`).
-- **whisper.cpp** e os modelos Whisper: MIT. Modelos baixados de uma revisão fixa, com SHA-256 conferido.
-- **Montserrat**: SIL Open Font License 1.1.
+- **FFmpeg** (Windows: 6.1.1 "essentials", gyan.dev) — **GPL v3**, executado como processo separado e sem modificações. O texto da licença e a oferta do código-fonte estão em `licenses/AVISOS-DE-TERCEIROS.txt`, gerado a cada build.
+- **whisper.cpp** e modelos Whisper — MIT.
+- **Montserrat** — SIL Open Font License 1.1.
 
-> Antes de cobrar pelo app, vale uma revisão jurídica da conformidade (GPL, marcas, patentes de H.264).
+O código do Kortin é de uso restrito (todos os direitos reservados), salvo os componentes de terceiros acima.

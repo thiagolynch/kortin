@@ -1,4 +1,4 @@
-Kortin 0.5.0 — Avisos de componentes de terceiros
+Kortin 0.6.0 — Avisos de componentes de terceiros
 ==============================================================================
 
 FFmpeg

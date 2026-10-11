@@ -177,6 +177,39 @@ function check(cond, msg) {
   }).promise;
   check(uniRes.ok && fs.existsSync(uniOut) && !fs.existsSync(`${uniOut}.parcial.mp4`), 'Caminhos com acentos/emoji + legenda com caracteres de controle');
 
+  // Música de fundo: repete, entra com fade e abaixa sozinha quando há voz (ducking)
+  const music = make('musica.mp3', ['-f', 'lavfi', '-i', 'sine=frequency=220:duration=2', '-c:a', 'libmp3lame', '-q:a', '4']);
+  const band = (file, start, dur) => {
+    const r = spawnSync(engine.FFMPEG, ['-hide_banner', '-ss', String(start), '-t', String(dur), '-i', file, '-vn', '-af', 'bandpass=f=220:width_type=q:w=8,volumedetect', '-f', 'null', '-']);
+    const m = /mean_volume: (-?[\d.]+) dB/.exec(r.stderr.toString());
+    return m ? Number(m[1]) : null;
+  };
+  const withVoiceThenSilence = [
+    { path: horizontal, inPoint: 0, outPoint: 3, hasAudio: true, volume: 1, speed: 1 }, // "voz" (440 Hz)
+    { path: vertical, inPoint: 0, outPoint: 3, hasAudio: false, volume: 1, speed: 1 }, // sem voz
+  ];
+  for (const duck of [true, false]) {
+    const out = path.join(tmp, `musica-${duck ? 'duck' : 'reta'}.mp4`);
+    const res = await engine.exportVideo(withVoiceThenSilence, {
+      width: 1080, height: 1080, fit: 'contain', crf: 32, preset: 'ultrafast', output: out,
+      music: { path: music, volume: 0.5, duck, fadeIn: 0, fadeOut: 0 },
+    }).promise;
+    const info = res.ok ? await engine.probe(out) : null;
+    const underVoice = band(out, 0.8, 1.8);
+    const alone = band(out, 3.8, 1.8); // a música (2 s) precisa ter repetido para tocar aqui
+    const diff = alone - underVoice;
+    check(
+      info && Math.abs(info.duration - 6) < 0.1 && alone > -40 && (duck ? diff > 6 : Math.abs(diff) < 3),
+      `Música ${duck ? 'com abaixamento' : 'sem abaixamento'}: ${underVoice} dB sob a voz vs ${alone} dB sozinha (repetiu: ${alone > -40 ? 'sim' : 'não'})`
+    );
+  }
+  // música também no caminho em partes (mais de 16 clipes)
+  const manyMusic = Array.from({ length: 20 }, (_, i) => ({ path: i % 2 ? vertical : horizontal, inPoint: 0, outPoint: 0.5, hasAudio: !(i % 2), volume: 1, speed: 1 }));
+  const mmOut = path.join(tmp, 'musica-partes.mp4');
+  const mmRes = await engine.exportVideo(manyMusic, { width: 540, height: 960, fit: 'cover', crf: 35, preset: 'ultrafast', output: mmOut, music: { path: music, volume: 0.4, duck: true, fadeIn: 1, fadeOut: 1 } }).promise;
+  const mmInfo = mmRes.ok ? await engine.probe(mmOut) : null;
+  check(mmRes.parts > 1 && mmInfo && Math.abs(mmInfo.duration - 10) < 0.1 && band(mmOut, 4, 2) > -45, `Música na exportação em partes: ${mmRes.parts} partes, ${mmInfo?.duration.toFixed(2)}s`);
+
   if (failures) {
     console.error(`\n${failures} teste(s) falharam.`);
     process.exit(1);

@@ -12,6 +12,7 @@ export const emptyDocument = (aspect = '9:16', fit = 'blur') => ({
   fit,
   captions: DEFAULT_CAPTIONS,
   transcripts: {},
+  music: null, // { path, name, duration, volume, duck, fadeIn, fadeOut }
 });
 
 const initial = (doc) => ({ doc, past: [], future: [], txn: null });

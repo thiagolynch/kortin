@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { emptyDocument } from '../state/document';
 import { DEFAULT_CAPTIONS } from '../lib/captions';
 import {
-  ASPECTS, FITS, baseName, cleanError, durationMismatches, remapProjectPaths, restoreClips, serializeProject,
+  ASPECTS, FITS, MUSIC_DEFAULTS, baseName, cleanError, durationMismatches, musicFields, remapProjectPaths, restoreClips,
+  serializeProject,
 } from '../lib/timeline';
 
 const AUTOSAVE_DELAY = 1500;
@@ -55,6 +56,16 @@ export function useProject({ docApi, library, player, notify, onLoaded, askRelin
       }
     }
     player.pause();
+    // música: confirma que existe e lê a duração (se falhar, o projeto abre sem ela)
+    let music = null;
+    if (data.music?.path) {
+      try {
+        const info = await window.kortin.probeAudio(data.music.path);
+        music = { ...MUSIC_DEFAULTS, ...musicFields(data.music), name: info.name, duration: info.duration };
+      } catch {
+        notifyLater = `A música "${baseName(data.music.path)}" não foi encontrada e ficou de fora.`;
+      }
+    }
     const paths = [...new Set(data.clips.map((c) => c.path))];
     const { ok, errors } = await library.probeAll(paths);
     const infoByPath = Object.fromEntries(ok.map((i) => [i.path, i]));
@@ -65,6 +76,7 @@ export function useProject({ docApi, library, player, notify, onLoaded, askRelin
       fit: FITS[data.fit] ? data.fit : 'blur',
       captions: { ...DEFAULT_CAPTIONS, ...(data.captions || {}) },
       transcripts: data.transcripts && typeof data.transcripts === 'object' ? data.transcripts : {},
+      music,
     };
     library.replaceMedia(ok);
     ops.reset(next);

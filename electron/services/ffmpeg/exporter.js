@@ -118,10 +118,12 @@ function exportVideo(timeline, opts, onProgress, onEncoder) {
       if (cancelled) return null;
       const name = `parte-${String(i).padStart(4, '0')}.mkv`;
       const graphName = `grafo-${i}.txt`;
-      fs.writeFileSync(path.join(workDir, graphName), buildGraph(parts[i], opts).graph, 'utf8');
+      // partes sem música: ela entra uma vez só, no passo final (sem emendas audíveis)
+      const partOpts = { ...opts, music: null };
+      fs.writeFileSync(path.join(workDir, graphName), buildGraph(parts[i], partOpts).graph, 'utf8');
       const partDur = parts[i].reduce((s, c) => s + c.dur, 0);
       const res = await ffmpeg(
-        buildExportArgs(parts[i], { ...opts, output: name }, { graphFile: graphName, intermediate: true }),
+        buildExportArgs(parts[i], { ...partOpts, output: name }, { graphFile: graphName, intermediate: true }),
         (s) => report(((done + Math.min(s, partDur)) / total) * CHUNK_PHASE)
       );
       if (cancelled) return null;
@@ -131,7 +133,7 @@ function exportVideo(timeline, opts, onProgress, onEncoder) {
     }
     fs.writeFileSync(path.join(workDir, 'lista.txt'), names.map((n) => `file '${n}'`).join('\n'), 'utf8');
     const out = await withFallback(
-      (encoder) => buildConcatArgs('lista.txt', { ...opts, encoder, captionFilter, output: tmpOut }),
+      (encoder) => buildConcatArgs('lista.txt', { ...opts, encoder, captionFilter, total, output: tmpOut }),
       (s) => report(CHUNK_PHASE + (s / total) * (1 - CHUNK_PHASE))
     );
     return { ...out, parts: parts.length };

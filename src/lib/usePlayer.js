@@ -13,7 +13,7 @@ export function usePlayer(segments) {
   const store = useMemo(() => createPlayheadStore(), []);
   const segRef = useRef(segments);
   segRef.current = segments;
-  const st = useRef({ index: -1, pending: null, raf: 0 });
+  const st = useRef({ index: -1, pending: null, raf: 0, stopAt: null });
   const audio = useRef(null); // { ctx, gain } | false (indisponível) | null (ainda não criado)
 
   const ensureAudio = useCallback(() => {
@@ -85,6 +85,7 @@ export function usePlayer(segments) {
 
   const pause = useCallback(() => {
     cancelAnimationFrame(st.current.raf);
+    st.current.stopAt = null;
     store.set({ playing: false });
     videoRef.current?.pause();
   }, [store]);
@@ -111,6 +112,10 @@ export function usePlayer(segments) {
         const t = seg.start + Math.max(0, ct - seg.clip.inPoint) / (seg.clip.speed || 1);
         store.set({ time: t });
         applyGain(seg, t);
+        if (s.stopAt != null && t >= s.stopAt) { // "ouvir o trecho": para sozinho no fim
+          pause();
+          return;
+        }
       }
     }
     s.raf = requestAnimationFrame(tick);
@@ -128,6 +133,15 @@ export function usePlayer(segments) {
     cancelAnimationFrame(st.current.raf);
     st.current.raf = requestAnimationFrame(tick);
   }, [ensureAudio, load, store, tick]);
+
+  /** Toca só de a até b (ex.: ouvir em volta de um corte sugerido). */
+  const playRange = useCallback((a, b) => {
+    const total = totalOf(segRef.current);
+    const from = clamp(a, 0, total);
+    store.set({ time: from, playing: false });
+    play();
+    st.current.stopAt = clamp(b, from, total);
+  }, [play, store]);
 
   const toggle = useCallback(() => (store.get().playing ? pause() : play()), [pause, play, store]);
 
@@ -158,7 +172,7 @@ export function usePlayer(segments) {
   }, []);
 
   return useMemo(
-    () => ({ videoRef, store, play, pause, toggle, seek, onLoadedMetadata, getTime: () => store.get().time }),
-    [store, play, pause, toggle, seek, onLoadedMetadata]
+    () => ({ videoRef, store, play, pause, toggle, seek, playRange, onLoadedMetadata, getTime: () => store.get().time }),
+    [store, play, pause, toggle, seek, playRange, onLoadedMetadata]
   );
 }

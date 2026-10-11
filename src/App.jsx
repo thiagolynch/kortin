@@ -13,11 +13,15 @@ import Welcome from './components/Welcome';
 import CaptionsPanel from './components/CaptionsPanel';
 import RecoveryBanner from './components/RecoveryBanner';
 import RelinkDialog from './components/RelinkDialog';
+import MusicCard from './components/MusicCard';
 import { PlayButton, Timecode } from './components/Transport';
 import { Icon, Logo } from './components/Icons';
-import { MAX_CHARS, deriveCues, editCue } from './lib/captions';
+import { CUT_TYPES, FILLERS, MAX_CHARS, applyCuts, deriveCues, editCue, suggestCuts } from './lib/captions';
 import { usePlayer } from './lib/usePlayer';
-import { ASPECTS, FITS, baseName, buildSegments, mediaToClip, splitAt, totalOf, uid } from './lib/timeline';
+import { useMusic } from './hooks/useMusic';
+import {
+  ASPECTS, FITS, MUSIC_DEFAULTS, baseName, buildSegments, cleanError, mediaToClip, musicFields, splitAt, totalOf, uid,
+} from './lib/timeline';
 import { patchClip, useDocument } from './state/document';
 import { useMediaLibrary } from './hooks/useMediaLibrary';
 import { useProject } from './hooks/useProject';
@@ -62,7 +66,7 @@ export default function App() {
 function Editor() {
   const docApi = useDocument();
   const { doc, ops } = docApi;
-  const { clips, aspect, fit, captions: captionSettings, transcripts } = doc;
+  const { clips, aspect, fit, captions: captionSettings, transcripts, music } = doc;
   const docRef = useRef(doc);
   docRef.current = doc;
 
@@ -82,6 +86,7 @@ function Editor() {
   const total = totalOf(segments);
   const player = usePlayer(segments);
   const library = useMediaLibrary();
+  useMusic(music, player.store, segments, total);
   const exportQueue = useExportQueue(notify);
   const cues = useMemo(
     () => deriveCues(segments, transcripts, { maxChars: MAX_CHARS[aspect] || 28 }),
@@ -241,10 +246,78 @@ function Editor() {
     editCue: (cue, text) => ops.commit((d) => ({ ...d, transcripts: editCue(d.transcripts, cue, text) })),
   }), [ops]);
 
-  const applyCleanup = useCallback((plan, msg) => {
-    ops.commit((d) => ({ ...d, clips: plan.clips }));
-    notify(`Fala limpa: ${msg}. Ctrl+Z desfaz.`);
+  // ---------- Cortes sugeridos (Módulo 3) ----------
+  const [cutOptions, setCutOptions] = useState(() => ({
+    minPause: 0.7,
+    fillers: FILLERS.filter((f) => f.on).map((f) => f.word),
+    restarts: true,
+  }));
+  const [cutDecisions, setCutDecisions] = useState({}); // id → true/false (o que a pessoa decidiu)
+  const [cutFocus, setCutFocus] = useState(null);
+  const suggestions = useMemo(() => (Object.keys(transcripts).length
+    ? suggestCuts(clips, transcripts, {
+      minPause: cutOptions.minPause,
+      fillers: FILLERS.filter((f) => cutOptions.fillers.includes(f.word)),
+      restarts: cutOptions.restarts,
+    })
+    : []), [clips, transcripts, cutOptions]);
+  const isCutOn = useCallback((s) => cutDecisions[s.id] ?? CUT_TYPES[s.type].defaultOn, [cutDecisions]);
+
+  const review = useMemo(() => ({
+    suggestions,
+    isOn: isCutOn,
+    options: cutOptions,
+    focusId: cutFocus,
+    onOptions: (patch) => setCutOptions((o) => ({ ...o, ...patch })),
+    onDecide: (id, on) => setCutDecisions((d) => ({ ...d, [id]: on })),
+    onDecideAll: (on) => setCutDecisions(Object.fromEntries(suggestions.map((x) => [x.id, on]))),
+    onFocus: (id) => {
+      setCutFocus(id);
+      const sug = suggestions.find((x) => x.id === id);
+      if (sug) { player.pause(); player.seek(sug.start); }
+    },
+    // ouve 1 s antes e 1 s depois do trecho, para decidir com contexto
+    onListen: (sug) => { setCutFocus(sug.id); player.playRange(sug.start - 1, sug.end + 1); },
+    onApply: () => {
+      const accepted = suggestions.filter(isCutOn);
+      const res = applyCuts(docRef.current.clips, accepted);
+      if (!res.cuts) return;
+      ops.commit((d) => ({ ...d, clips: res.clips }));
+      setCutDecisions({});
+      setCutFocus(null);
+      notify(`${res.cuts} corte(s) aplicados, ${res.seconds.toFixed(1).replace('.', ',')} s a menos. Ctrl+Z desfaz.`);
+    },
+  }), [suggestions, isCutOn, cutOptions, cutFocus, player, ops, notify]);
+
+  // ---------- Música de fundo ----------
+  const [musicBusy, setMusicBusy] = useState(false);
+  const setMusicFromPath = useCallback(async (p) => {
+    if (!p) return;
+    setMusicBusy(true);
+    try {
+      const info = await window.kortin.probeAudio(p);
+      // trocar de música mantém o volume e as escolhas da anterior
+      ops.commit((d) => ({
+        ...d,
+        music: { ...MUSIC_DEFAULTS, ...(d.music ? musicFields(d.music) : {}), path: info.path, name: info.name, duration: info.duration },
+      }));
+      notify(`Música de fundo: ${info.name}`);
+    } catch (err) {
+      notify(`Não foi possível usar esta música: ${cleanError(err)}`);
+    } finally {
+      setMusicBusy(false);
+    }
   }, [ops, notify]);
+  const musicApi = useMemo(() => ({
+    onPick: async () => setMusicFromPath(await window.kortin.openMusic()),
+    onRemove: () => ops.set('music', null),
+    onChange: (patch) => ops.commit((d) => (d.music ? { ...d, music: { ...d.music, ...patch } } : d)),
+    onPreview: (patch) => {
+      ops.begin();
+      ops.preview((d) => (d.music ? { ...d, music: { ...d.music, ...patch } } : d));
+    },
+    onEnd: ops.end,
+  }), [ops, setMusicFromPath]);
 
   const seekPaused = useCallback((t) => { player.pause(); player.seek(t); }, [player]);
 
@@ -278,7 +351,12 @@ function Editor() {
     // o processo principal só libera arquivos locais de vídeo/projeto que existem
     const accepted = await window.kortin.authorizeFiles(dropped);
     if (accepted.length < dropped.length) notify(`${dropped.length - accepted.length} arquivo(s) ignorado(s): formato não suportado ou pasta de rede.`);
-    if (accepted.length) openPaths(accepted);
+    // áudio solto na janela vira a música de fundo; vídeos e projetos seguem o caminho normal
+    const isAudio = (p) => /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|wma)$/i.test(p);
+    const audio = accepted.find(isAudio);
+    if (audio) setMusicFromPath(audio);
+    const rest = accepted.filter((p) => !isAudio(p));
+    if (rest.length) openPaths(rest);
   };
 
   return (
@@ -322,8 +400,14 @@ function Editor() {
         <div className="topbar-right">
           <ExportQueue jobs={exportQueue.jobs} onCancel={exportQueue.cancel} onShow={(p) => window.kortin.showInFolder(p)} onClear={exportQueue.clear} />
           <button className="icon-btn" onClick={() => setWelcome(true)} title="Boas-vindas e atalhos"><Icon.Help /></button>
-          <button className="btn ghost ai-soon" disabled title="Chega no módulo 3">
-            <Icon.Sparkles width={15} height={15} /> Corte com IA <small>em breve</small>
+          <button
+            className="btn ghost"
+            disabled={!clips.length}
+            onClick={() => setLeftTab('captions')}
+            title="Pausas, vícios e frases reiniciadas sugeridos pela transcrição: você revisa e aplica"
+          >
+            <Icon.Sparkles width={15} height={15} /> Cortes com IA
+            {suggestions.length > 0 && <span className="tab-badge">{suggestions.length}</span>}
           </button>
           <button className="btn primary" disabled={!clips.length} onClick={() => { player.pause(); setExporting(true); }}>
             <Icon.Export width={16} height={16} /> Exportar
@@ -342,7 +426,10 @@ function Editor() {
             </button>
           </div>
           {leftTab === 'media' ? (
-            <MediaBin media={library.media} busy={library.busy} onImport={openImport} onAdd={addFromBin} />
+            <div className="media-tab">
+              <MediaBin media={library.media} busy={library.busy} onImport={openImport} onAdd={addFromBin} />
+              <MusicCard music={music} total={total} busy={musicBusy} {...musicApi} />
+            </div>
           ) : (
             <CaptionsPanel
               clips={clips}
@@ -352,7 +439,7 @@ function Editor() {
               store={player.store}
               api={captionsApi}
               onSeek={seekPaused}
-              onApplyCleanup={applyCleanup}
+              review={review}
               notify={notify}
             />
           )}
@@ -424,6 +511,11 @@ function Editor() {
           snap={snap}
           peaksByPath={library.peaksByPath}
           cues={captionSettings.enabled ? cues : []}
+          cutMarks={leftTab === 'captions' ? suggestions : null}
+          music={music}
+          isCutOn={isCutOn}
+          cutFocus={cutFocus}
+          onCutClick={review.onFocus}
           onSeek={player.seek}
           onSelect={setSelectedId}
           trim={trim}
@@ -443,6 +535,7 @@ function Editor() {
           segments={segments}
           transcripts={transcripts}
           captionSettings={captionSettings}
+          music={musicFields(music)}
           onQueue={exportQueue.enqueue}
           onClose={() => setExporting(false)}
         />

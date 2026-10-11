@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('kortin', {
   },
   authorizeFiles: (paths) => ipcRenderer.invoke('files:authorize', paths),
   locateMedia: (name) => ipcRenderer.invoke('media:locate', name),
+  openMusic: () => ipcRenderer.invoke('dialog:openMusic'),
+  probeAudio: (filePath) => ipcRenderer.invoke('media:probeAudio', filePath),
   searchMediaFolder: (names) => ipcRenderer.invoke('media:searchFolder', names),
 
   // legenda automática

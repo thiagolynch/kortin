@@ -152,7 +152,15 @@ export function mediaToClip(m) {
 
 
 /** Converte o estado do editor no conteúdo do arquivo .kortin */
-export function serializeProject({ clips, aspect, fit, captions, transcripts }) {
+export const MUSIC_DEFAULTS = { volume: C.MUSIC.defaultVolume, duck: true, fadeIn: 1, fadeOut: 2 };
+
+/** Só os campos da música que vão para o projeto e para a exportação */
+export const musicFields = (m) => (m ? {
+  path: m.path, name: m.name, duration: m.duration,
+  volume: m.volume ?? MUSIC_DEFAULTS.volume, duck: m.duck ?? true, fadeIn: m.fadeIn ?? 0, fadeOut: m.fadeOut ?? 0,
+} : null);
+
+export function serializeProject({ clips, aspect, fit, captions, transcripts, music }) {
   const used = new Set(clips.map((c) => c.path));
   return {
     app: 'kortin',
@@ -165,6 +173,7 @@ export function serializeProject({ clips, aspect, fit, captions, transcripts }) 
       volume: volume ?? 1, speed: speed ?? 1, fadeIn: fadeIn ?? 0, fadeOut: fadeOut ?? 0, denoise: !!denoise,
     })),
     ...(captions ? { captions } : {}),
+    ...(music ? { music: musicFields(music) } : {}),
     // só as transcrições dos vídeos que estão no projeto
     ...(transcripts
       ? { transcripts: Object.fromEntries(Object.entries(transcripts).filter(([p]) => used.has(p))) }
@@ -175,9 +184,11 @@ export function serializeProject({ clips, aspect, fit, captions, transcripts }) 
 /** Troca caminhos de vídeo (clipes e transcrições) depois que o usuário relocalizou arquivos. */
 export function remapProjectPaths(data, map) {
   const has = (p) => Object.prototype.hasOwnProperty.call(map, p);
-  if (!data.clips.some((c) => has(c.path))) return data;
+  const musicMoved = data.music && has(data.music.path);
+  if (!data.clips.some((c) => has(c.path)) && !musicMoved) return data;
   return {
     ...data,
+    ...(musicMoved ? { music: { ...data.music, path: map[data.music.path] } } : {}),
     clips: data.clips.map((c) => (has(c.path) ? { ...c, path: map[c.path] } : c)),
     transcripts: data.transcripts
       ? Object.fromEntries(Object.entries(data.transcripts).map(([p, t]) => [has(p) ? map[p] : p, t]))

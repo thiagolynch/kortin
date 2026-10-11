@@ -1,8 +1,8 @@
 {
   "name": "kortin",
   "productName": "Kortin",
-  "version": "0.5.0",
-  "description": "Editor de vídeo sem anúncios e sem marca d'água, com IA. Módulo 1: editor base.",
+  "version": "0.6.0",
+  "description": "Editor de vídeo sem marca d'água, com legenda automática, cortes sugeridos e música com abaixamento — tudo com IA local.",
   "main": "electron/main.js",
   "author": "Thiago Lynch",
   "license": "UNLICENSED",
@@ -92,7 +92,7 @@
       {
         "ext": "kortin",
         "name": "Projeto Kortin",
-        "description": "Projeto do Kortin",
+        "description": "Editor de vídeo sem marca d'água, com legenda automática, cortes sugeridos e música com abaixamento — tudo com IA local.",
         "role": "Editor"
       }
     ],

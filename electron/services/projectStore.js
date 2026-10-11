@@ -27,6 +27,9 @@ function validateShape(data) {
   for (const c of data.clips) {
     if (!c || typeof c.path !== 'string') fail('O projeto está corrompido.');
   }
+  if (data.music != null && (typeof data.music !== 'object' || typeof data.music.path !== 'string')) {
+    fail('O projeto está corrompido (música).');
+  }
   return data;
 }
 
