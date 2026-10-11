@@ -3,6 +3,11 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.1] — 2026-10-11
+
+### Correção
+- **Vídeo HDR saía esmaecido na exportação.** Vídeos gravados em HDR (iPhone/Android recentes, inclusive com Dolby Vision) usam uma curva de cor (PQ ou HLG) diferente da que o resto da cadeia de exportação espera; sem converter, o resultado final em SDR saía com cores lavadas e menos contraste que o original. O Kortin agora detecta HDR na importação e converte para SDR (`tonemap`) antes de aplicar cor, fades e queimar legenda/título — a prévia não muda, só a exportação.
+
 ## [0.7.0] — 2026-10-11
 
 ### Cor

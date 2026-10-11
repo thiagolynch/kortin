@@ -141,6 +141,7 @@ export function mediaToClip(m) {
     width: m.width,
     height: m.height,
     hasAudio: m.hasAudio,
+    hdr: !!m.hdr,
     thumb: m.thumb,
     volume: 1,
     speed: 1,

@@ -14,6 +14,13 @@ const PROBE_MP4 = `Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'a.mp4':
   Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709, progressive), 1920x1080 [SAR 1:1 DAR 16:9], 1800 kb/s, 29.97 fps, 29.97 tbr
   Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 192 kb/s`;
 const PROBE_ROTATED = `${PROBE_MP4}\n      displaymatrix: rotation of -90.00 degrees`;
+const PROBE_HDR_IPHONE = `Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'IMG_0643.mov':
+  Duration: 00:00:13.13, start: 0.000000, bitrate: 25084 kb/s
+  Stream #0:0[0x1](und): Video: hevc (Main 10) (hvc1 / 0x31637668), yuv420p10le(tv, bt2020nc/bt2020/arib-std-b67), 3840x2160, 24763 kb/s, 30 fps, 30 tbr, 600 tbn (default)
+    Side data:
+      DOVI configuration record: version: 1.0, profile: 8, level: 7, rpu flag: 1, el flag: 0, bl flag: 1, compatibility id: 4
+      displaymatrix: rotation of -90.00 degrees
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 214 kb/s (default)`;
 const PROBE_MP3_COVER = `Input #0, mp3, from 'm.mp3':
   Duration: 00:03:10.00, start: 0.025057, bitrate: 320 kb/s
   Stream #0:0: Audio: mp3, 44100 Hz, stereo, fltp, 320 kb/s
@@ -28,6 +35,12 @@ describe('parseProbe', () => {
   });
   it('MP3 com capa não é vídeo', () => {
     expect(() => parseProbe(PROBE_MP3_COVER)).toThrow(/trilha de vídeo/);
+  });
+  it('vídeo HDR de iPhone (bt2020 + Dolby Vision) é marcado hdr: true', () => {
+    expect(parseProbe(PROBE_HDR_IPHONE)).toMatchObject({ hdr: true, width: 2160, height: 3840 });
+  });
+  it('vídeo SDR comum não é marcado como HDR', () => {
+    expect(parseProbe(PROBE_MP4).hdr).toBe(false);
   });
   it('duração zero é recusada', () => {
     expect(() => parseProbe(PROBE_MP4.replace('00:01:02.50', '00:00:00.00'))).toThrow(/vazio/);
@@ -106,6 +119,12 @@ describe('buildGraph', () => {
   it('clipe de 0,1 s a 4x ainda gera ao menos 1 quadro (tpad)', () => {
     const { graph } = buildGraph([{ ...clip(1), outPoint: 0.1, speed: 4 }], { width: 1080, height: 1080, fps: 30 });
     expect(graph).toMatch(/tpad=stop_mode=clone/);
+  });
+  it('clipe hdr ganha tonemap antes do resto da cadeia; clipe comum não', () => {
+    const { graph } = buildGraph([{ ...clip(1), hdr: true }, { ...clip(2), hdr: false }], { width: 1080, height: 1920, fps: 30, fit: 'cover' });
+    const [chainHdr, chainSdr] = graph.split(';\n');
+    expect(chainHdr).toMatch(/setsar=1,zscale=t=linear.*tonemap=hable.*fps=30/);
+    expect(chainSdr).not.toMatch(/tonemap/);
   });
 });
 

@@ -27,6 +27,11 @@ function parseProbe(text) {
   const duration = toSeconds(d[1], d[2], d[3]);
   if (!(duration > 0)) throw new Error('O vídeo está vazio ou corrompido.');
 
+  // HDR (comum em vídeos de iPhone/Android recentes): a trilha é bt2020 com transferência PQ
+  // (smpte2084) ou HLG (arib-std-b67), ou tem Dolby Vision. Exportar sem converter para SDR
+  // deixa a cor esmaecida (ver filtergraph.js: tonemapChain).
+  const hdr = /bt2020.*?(smpte2084|arib-std-b67)/.test(videoLine) || /DOVI configuration record/.test(text);
+
   return {
     duration,
     width,
@@ -34,6 +39,7 @@ function parseProbe(text) {
     fps: fps ? Number(fps[1]) : 30,
     hasAudio: lines.some((l) => /Stream #\d+:\d+.*: Audio:/.test(l)),
     rotation,
+    hdr,
   };
 }
 
