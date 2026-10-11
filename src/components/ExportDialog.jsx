@@ -43,9 +43,9 @@ export default function ExportDialog({
       const q = QUALITIES[quality];
       const encoder = useHw && hardware?.length ? hardware[0].id : 'libx264';
       const snapshot = clips.map(({
-        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut, zoom, vignette,
+        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, hdr, filter, videoFadeIn, videoFadeOut, zoom, vignette,
       }) => ({
-        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut, zoom, vignette,
+        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, hdr, filter, videoFadeIn, videoFadeOut, zoom, vignette,
       }));
       // a legenda é montada por formato: no vertical, frases mais curtas
       const captionsFor = (k) => {

@@ -274,6 +274,28 @@ function check(cond, msg) {
   const v7diff = [...v7a].filter((v, i) => Math.abs(v - v7b[i]) > 40).length;
   check(v7diff > 30, `Título gravado no vídeo: ${v7diff} pontos diferentes do vídeo sem título`);
 
+  // Tonemap de HDR: um vídeo com metadados HDR reais (bt2020/smpte2084, igual a um iPhone) precisa
+  // sair diferente com hdr:true vs hdr:false — essa é a mesma marca que a ExportDialog.jsx precisa
+  // enviar (o bug real era ela nunca enviar `hdr`, então nenhuma exportação pela interface
+  // aplicava o tonemap, mesmo em vídeos HDR de verdade).
+  const hdrSrc = make('hdr-fonte.mp4', [
+    '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30:duration=2',
+    '-pix_fmt', 'yuv420p10le', '-color_primaries', 'bt2020', '-colorspace', 'bt2020nc', '-color_trc', 'smpte2084',
+    '-c:v', 'libx265', '-tag:v', 'hvc1',
+  ]);
+  const hdrOn = path.join(tmp, 'hdr-on.mp4');
+  const hdrOff = path.join(tmp, 'hdr-off.mp4');
+  const hdrBase = { width: 1080, height: 1080, fit: 'contain', crf: 28, preset: 'ultrafast' };
+  const hdrOnRes = await engine.exportVideo([{ path: hdrSrc, inPoint: 0, outPoint: 2, hasAudio: false, volume: 1, speed: 1, hdr: true }], { ...hdrBase, output: hdrOn }).promise;
+  const hdrOffRes = await engine.exportVideo([{ path: hdrSrc, inPoint: 0, outPoint: 2, hasAudio: false, volume: 1, speed: 1, hdr: false }], { ...hdrBase, output: hdrOff }).promise;
+  const hdrA = rgbAt(hdrOn, 1.0);
+  const hdrB = rgbAt(hdrOff, 1.0);
+  const hdrDiff = [...hdrA].filter((v, i) => Math.abs(v - hdrB[i]) > 4).length;
+  check(
+    hdrOnRes.ok && hdrOffRes.ok && hdrDiff > 50,
+    `Tonemap de HDR muda a imagem quando hdr:true: ${hdrDiff} pontos diferentes do mesmo vídeo sem a marca`
+  );
+
   // Sobreposição: um retângulo vermelho sólido por cima do canto, com e sem fundo verde removido
   const overlayGreen = make('overlay-verde.mp4', [
     '-f', 'lavfi', '-i', 'color=c=green:size=320x180:rate=30:duration=3',

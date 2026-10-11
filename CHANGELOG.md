@@ -3,6 +3,13 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.10] — 2026-10-11
+
+### Correção: vídeos em HDR não recebiam o ajuste de cor na exportação real
+Mesma auditoria que corrigiu zoom/vinheta na v0.7.9, olhando pra um terceiro caso: a tela de exportação também nunca enviava a marca `hdr` do clipe para o motor. Resultado real: um vídeo gravado em HDR (comum em iPhone e Android recentes) importado no Kortin era corretamente identificado como HDR, mas **a correção de cor para tela comum (tonemap) nunca era aplicada em nenhuma exportação feita pela interface** — só nos meus testes que chamam o motor direto. Na prática, o vídeo final sairia com cores e contraste deslocados em relação ao que a câmera realmente capturou.
+
+Corrigido e coberto por um teste automatizado novo que gera um vídeo com metadados HDR reais (bt2020/smpte2084, iguais aos de um iPhone) e confere que a imagem exportada muda de verdade quando a marca é enviada — e por um segundo teste que lê o próprio código de `ExportDialog.jsx` e garante que todo campo de clipe que o motor valida também é enviado por ela, pra esse tipo de defeito não voltar a passar sem ser notado numa próxima feature.
+
 ## [0.7.9] — 2026-10-11
 
 ### Camada de sobreposição (reação, logo, chroma key)
