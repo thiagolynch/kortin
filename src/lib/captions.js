@@ -32,7 +32,23 @@ export const DEFAULT_CAPTIONS = {
   uppercase: null, // null = o padrão do estilo
   model: 'rapido',
   language: 'pt',
+  color: null, // null = cor padrão do estilo
+  accent: null, // null = destaque padrão do estilo (caixa/palavra ativa/brilho, conforme o estilo)
+  keywords: [], // [{ word, color }] — sempre nessa cor, onde quer que apareçam na legenda
+  stacked: false, // "legenda empilhada": mostra as últimas falas acima, meio apagadas
 };
+
+/** Mesma lógica usada na exportação (ass.js): palavra sem pontuação nas pontas, em minúsculas. */
+// eslint-disable-next-line no-misleading-character-class
+export const normWord = (s) => String(s ?? '').toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+/** Cor da palavra-chave que combina com esta palavra, se houver (prévia e exportação usam a mesma lista). */
+export function keywordColorFor(text, keywords) {
+  if (!keywords?.length) return null;
+  const w = normWord(text);
+  const hit = keywords.find((k) => normWord(k.word) === w);
+  return hit ? hit.color : null;
+}
 
 // Vícios de linguagem: os seguros vêm marcados; "né" e "tipo" às vezes têm sentido, então ficam opcionais
 export const FILLERS = [

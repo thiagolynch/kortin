@@ -183,11 +183,21 @@ function validateCaptions(captions) {
   if (typeof captions !== 'object' || !Array.isArray(captions.cues)) fail('Legendas inválidas.');
   if (captions.cues.length > C.LIMITS.maxCues) fail('Legendas demais neste vídeo.');
   const s = captions.settings || {};
+  const keywords = Array.isArray(s.keywords)
+    ? s.keywords.slice(0, 20).map((k) => ({
+      word: String(k?.word ?? '').trim().slice(0, 24),
+      color: HEX_COLOR.test(k?.color) ? k.color.toLowerCase() : fail('Cor da palavra-chave inválida.'),
+    })).filter((k) => k.word)
+    : [];
   const settings = {
     style: oneOf(s.style ?? 'classica', C.CAPTION_STYLES, 'estilo da legenda'),
     size: oneOf(s.size ?? 'm', Object.keys(C.CAPTION_SIZES), 'tamanho da legenda'),
     position: num(s.position ?? 0.72, 'altura da legenda', { min: 0, max: 1 }),
     uppercase: s.uppercase == null ? null : !!s.uppercase,
+    color: hexOrNull(s.color ?? null),
+    accent: hexOrNull(s.accent ?? null),
+    keywords,
+    stacked: !!s.stacked,
   };
   const cues = captions.cues.map((cue) => {
     const start = num(cue.start, 'tempo da legenda', { min: 0, max: C.LIMITS.maxDurationSeconds });
