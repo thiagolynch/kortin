@@ -3,6 +3,18 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.7] — 2026-10-11
+
+### Legenda automática: cor customizável, palavras-chave em destaque e empilhamento
+Baseado em padrões vistos em shorts populares (treino, podcast, treino em caixa com número em verde):
+
+- **Cor customizável na legenda automática**: igual já valia pra títulos, agora dá pra escolher a cor do texto e a cor de destaque (paletas rápidas + seletor de cor). O destaque vai pro que já é a "identidade" de cada estilo — caixa de fundo (Caixa), palavra ativa (Destaque) ou brilho do contorno (Neon).
+- **Palavras-chave em cor própria**: uma lista de palavras/números (ex.: "30%", "hoje", "grátis") que sempre aparecem na cor escolhida, onde quer que surjam na fala — comparação sem acento/pontuação/caixa, até 20 por projeto.
+- **Legenda empilhada**: liga e as últimas falas ficam acima, um pouco menores e apagadas, acumulando linha por linha — o jeito "treino na esteira"/podcast de mostrar contexto sem repetir a legenda inteira.
+- Os três recursos funcionam juntos e com os dois jeitos de renderizar legenda que o Kortin já tinha (evento único e destaque palavra por palavra/karaokê) — "prévia = exportação" continua valendo.
+
+**Limitação honesta**: palavra-chave é por palavra inteira (não por trecho de palavra) e o empilhamento mostra sempre as 2 falas anteriores — ainda não é configurável.
+
 ## [0.7.6] — 2026-10-11
 
 ### Tipografia dos títulos: fontes novas, não só pesos da Montserrat

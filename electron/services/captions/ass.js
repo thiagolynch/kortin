@@ -114,8 +114,54 @@ function titleEvents(titles, W, H) {
     });
 }
 
+/** Palavra sem acentuação de pontuação nas pontas, em minúsculas — pra comparar com a lista de palavras-chave. */
+// eslint-disable-next-line no-misleading-character-class
+const normWord = (s) => String(s ?? '').toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+/** settings.keywords: [{word, color}] → Map normalizada de palavra → cor .ass, pra achar rápido por palavra. */
+function keywordColorMap(keywords) {
+  const map = new Map();
+  for (const k of keywords || []) {
+    const w = normWord(k.word);
+    if (w) map.set(w, assColor(k.color));
+  }
+  return map;
+}
+
+/**
+ * Cor do texto (settings.color) e cor de destaque (settings.accent) escolhidas pelo usuário, por
+ * cima do preset do estilo — mesma ideia da cor customizada dos títulos (v0.7.2), agora também
+ * pras legendas automáticas. O destaque vai pro que cada estilo já usa como "cor de identidade":
+ * a caixa de fundo (Caixa), a palavra ativa (Destaque) ou o brilho do contorno (Neon).
+ */
+function withCaptionOverrides(preset, settings) {
+  const p = { ...preset };
+  if (settings?.color) p.primary = settings.color.replace('#', '').toUpperCase();
+  if (settings?.accent) {
+    const acc = settings.accent.replace('#', '').toUpperCase();
+    if (p.box) p.box = acc;
+    if (p.highlight) p.highlight = acc;
+    if (p.blur) p.outline = acc; // só o Neon tem brilho — o contorno É a cor do brilho
+  }
+  return p;
+}
+
+/** Texto de uma frase com cor própria por palavra-chave e, com activeIdx >= 0, a palavra da vez animada (karaokê). */
+function buildCueText(words, fmt, kwMap, base, hl, activeIdx = -1) {
+  return words.map((w, j) => {
+    const text = fmt(w.text);
+    const kw = kwMap.get(normWord(w.text));
+    if (j === activeIdx) return `{\\c${kw || hl}\\fscx108\\fscy108}${text}{\\c${base}\\fscx100\\fscy100}`;
+    if (kw) return `{\\c${kw}}${text}{\\c${base}}`;
+    return text;
+  }).join(' ');
+}
+
+/** Linha de contexto (legenda empilhada): menor e translúcida, pra não competir com a linha atual. */
+const dimLine = (text) => `{\\alpha&H60&\\fscx82\\fscy82}${text}{\\alpha&H00&\\fscx100\\fscy100}`;
+
 function buildAss(cues, settings, W, H, titles = []) {
-  const p = PRESETS[settings.style] || PRESETS.classica;
+  const p = withCaptionOverrides(PRESETS[settings.style] || PRESETS.classica, settings);
   const fontSize = Math.round(p.size * Math.sqrt(W * H) * (SIZES[settings.size] || 1));
   const bord = Math.max(1, Math.round(fontSize * p.bord));
   const margin = Math.round(W * 0.08);
@@ -134,26 +180,32 @@ function buildAss(cues, settings, W, H, titles = []) {
   const lead = `{\\an5\\pos(${x},${y})${p.blur ? `\\blur${p.blur}` : ''}}`;
   const hl = p.highlight ? assColor(p.highlight) : null;
   const base = assColor(p.primary);
+  const kwMap = keywordColorMap(settings.keywords);
+  const lookback = settings.stacked ? 2 : 0; // "legenda empilhada": mostra as últimas falas acima, meio apagadas
   const lines = [];
 
-  for (const cue of cues) {
-    if (!cue.words?.length || cue.end <= cue.start) continue;
+  cues.forEach((cue, idx) => {
+    if (!cue.words?.length || cue.end <= cue.start) return;
+    const context = [];
+    for (let k = lookback; k >= 1; k--) {
+      const prev = cues[idx - k];
+      if (prev?.words?.length) context.push(dimLine(buildCueText(prev.words, fmt, kwMap, base, hl)));
+    }
+    const prefix = context.length ? `${context.join('\\N')}\\N` : '';
     if (!hl) {
-      const text = cue.words.map((w) => fmt(w.text)).join(' ');
+      const text = prefix + buildCueText(cue.words, fmt, kwMap, base, hl);
       lines.push(`Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},K,,0,0,0,,${lead}${text}`);
-      continue;
+      return;
     }
     // Destaque palavra a palavra: um evento por palavra, com a palavra da vez colorida
     cue.words.forEach((w, i) => {
       const from = i === 0 ? cue.start : w.start;
       const to = i === cue.words.length - 1 ? cue.end : cue.words[i + 1].start;
       if (to <= from) return;
-      const text = cue.words
-        .map((x, j) => (j === i ? `{\\c${hl}\\fscx108\\fscy108}${fmt(x.text)}{\\c${base}\\fscx100\\fscy100}` : fmt(x.text)))
-        .join(' ');
+      const text = prefix + buildCueText(cue.words, fmt, kwMap, base, hl, i);
       lines.push(`Dialogue: 0,${assTime(from)},${assTime(to)},K,,0,0,0,,${lead}${text}`);
     });
-  }
+  });
 
   return [
     '[Script Info]',

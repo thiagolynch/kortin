@@ -452,20 +452,24 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .cap-edit { background: none; border: 0; color: var(--muted); cursor: pointer; opacity: 0; padding: 2px; }
 .cap-item:hover .cap-edit { opacity: 1; }
 
-/* legenda sobre o vídeo (prévia) */
+/* legenda sobre o vídeo (prévia). --cap-color/--cap-accent: cor custom (opcional); sem elas, cada
+   estilo usa seu padrão — igual ao esquema de cor custom dos títulos. */
 .cap-overlay {
   position: absolute; left: 8%; right: 8%; transform: translateY(-50%); text-align: center; pointer-events: none; z-index: 3;
-  font-family: 'Montserrat', sans-serif; line-height: 1.18; color: #fff;
+  font-family: 'Montserrat', sans-serif; line-height: 1.18; color: var(--cap-color, #fff);
 }
+.cap-line { display: block; }
 .cap-line span { paint-order: stroke fill; -webkit-text-stroke: calc(var(--bord) * 2) #000; }
+/* legenda empilhada: as últimas falas ficam acima, menores e meio apagadas (igual ao \alpha+\fscx do .ass) */
+.cap-line-dim { opacity: .62; transform: scale(.82); transform-origin: center; margin-bottom: .1em; }
 .cap-classica { font-weight: 700; }
 .cap-destaque { font-weight: 800; }
-.cap-destaque .on { color: #ffe14d; display: inline-block; transform: scale(1.08); }
+.cap-destaque .on { color: var(--cap-accent, #ffe14d); display: inline-block; transform: scale(1.08); }
 .cap-caixa { font-weight: 700; }
-.cap-caixa .cap-line { background: #000000b0; padding: .12em .4em; border-radius: .2em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.cap-caixa .cap-line { background: var(--cap-accent, #000000b0); padding: .12em .4em; border-radius: .2em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .cap-caixa .cap-line span { -webkit-text-stroke: 0; }
 .cap-neon { font-weight: 800; }
-.cap-neon .cap-line span { -webkit-text-stroke: 0; text-shadow: 0 0 calc(var(--bord) * .8) #22d3ee, 0 0 calc(var(--bord) * 1.6) #22d3ee, 0 0 calc(var(--bord) * 2.4) #22d3ee; }
+.cap-neon .cap-line span { -webkit-text-stroke: 0; text-shadow: 0 0 calc(var(--bord) * .8) var(--cap-accent, #22d3ee), 0 0 calc(var(--bord) * 1.6) var(--cap-accent, #22d3ee), 0 0 calc(var(--bord) * 2.4) var(--cap-accent, #22d3ee); }
 .cap-neon .on { color: #ff4fd8; }
 
 .tl-captions { position: absolute; left: 0; right: 0; top: 152px; height: 22px; }

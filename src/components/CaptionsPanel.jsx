@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CAPTION_STYLES, LANGUAGES, cueAt, cueText } from '../lib/captions';
+import { TITLE_SWATCHES } from '../lib/titles';
 import CutReview from './CutReview';
 import { useDerivedPlayhead } from '../state/playhead';
 import { cleanError, formatTime } from '../lib/timeline';
@@ -20,6 +21,8 @@ export default function CaptionsPanel({
   const [confirmDownload, setConfirmDownload] = useState(false);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // id da legenda em edição
+  const [kwText, setKwText] = useState('');
+  const [kwColor, setKwColor] = useState('#22d3ee');
 
   const refresh = () => window.kortin.captionsStatus().then(setStatus).catch(() => setStatus({ available: false, models: {} }));
   useEffect(() => { refresh(); }, []);
@@ -222,6 +225,66 @@ export default function CaptionsPanel({
                 className="grow"
               />
             </div>
+            <div className="insp-control-head"><label>Cores</label></div>
+            <div className="title-swatches">
+              {TITLE_SWATCHES.map((sw) => (
+                <button
+                  key={sw.label}
+                  className={`title-swatch${(settings.color ?? null) === sw.color && (settings.accent ?? null) === sw.accent ? ' active' : ''}`}
+                  title={sw.label}
+                  style={sw.color ? { background: sw.color, borderColor: sw.accent } : undefined}
+                  onClick={() => onSettings({ color: sw.color, accent: sw.accent })}
+                >
+                  {!sw.color && <Icon.Edit width={12} height={12} />}
+                </button>
+              ))}
+              <label className="title-swatch title-swatch-custom" title="Cor do texto" style={{ background: settings.color || '#888' }}>
+                <input type="color" value={settings.color || '#ffffff'} onChange={(e) => onSettings({ color: e.target.value })} />
+              </label>
+              <label className="title-swatch title-swatch-custom" title="Cor de destaque" style={{ background: settings.accent || '#888' }}>
+                <input type="color" value={settings.accent || '#000000'} onChange={(e) => onSettings({ accent: e.target.value })} />
+              </label>
+            </div>
+
+            <label className="title-headline-toggle">
+              <input type="checkbox" checked={!!settings.stacked} onChange={() => onSettings({ stacked: !settings.stacked })} />
+              Legenda empilhada <small className="muted">(mostra as últimas falas acima, mais apagadas)</small>
+            </label>
+          </section>
+
+          {/* Palavras-chave: sempre nessa cor, onde aparecerem na legenda (ex.: números, termos importantes) */}
+          <section className="cap-card">
+            <div className="cap-row"><strong>Palavras-chave</strong><span className="muted small">sempre na cor escolhida</span></div>
+            <div className="cap-row">
+              <input
+                className="cap-input" placeholder="ex.: 30%, grátis…" value={kwText} maxLength={24}
+                onChange={(e) => setKwText(e.target.value)}
+                onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter' && kwText.trim()) { onSettings({ keywords: [...settings.keywords, { word: kwText.trim(), color: kwColor }].slice(-20) }); setKwText(''); } }}
+              />
+              <label className="title-swatch title-swatch-custom" title="Cor da palavra-chave" style={{ background: kwColor }}>
+                <input type="color" value={kwColor} onChange={(e) => setKwColor(e.target.value)} />
+              </label>
+              <button
+                className="btn ghost sm"
+                disabled={!kwText.trim()}
+                onClick={() => { onSettings({ keywords: [...settings.keywords, { word: kwText.trim(), color: kwColor }].slice(-20) }); setKwText(''); }}
+              >
+                <Icon.Plus width={14} height={14} />
+              </button>
+            </div>
+            {settings.keywords.length > 0 && (
+              <div className="filler-chips">
+                {settings.keywords.map((k, i) => (
+                  <button
+                    key={`${k.word}-${i}`} style={{ color: k.color, borderColor: k.color }}
+                    title="Remover"
+                    onClick={() => onSettings({ keywords: settings.keywords.filter((_, j) => j !== i) })}
+                  >
+                    {k.word} ×
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Cortes sugeridos (Módulo 3) */}
