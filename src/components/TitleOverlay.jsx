@@ -18,8 +18,12 @@ function TitleOverlay({ titles, aspect, store, width, height, selectedId, onSele
     return (
       <div
         key={t.id}
-        className={`title-overlay title-${t.style}${t.id === selectedId ? ' selected' : ''}`}
-        style={{ top: `${t.position * 100}%`, fontSize: fs, '--pad': `${Math.max(2, assSize * (t.style === 'rodape' ? 0.45 : 0.35))}px` }}
+        className={`title-overlay title-${t.style} title-anim-${t.anim === 'pop' ? 'pop' : 'fade'}${t.id === selectedId ? ' selected' : ''}`}
+        style={{
+          top: `${t.position * 100}%`, fontSize: fs, '--pad': `${Math.max(2, assSize * (t.style === 'rodape' ? 0.45 : 0.35))}px`,
+          ...(t.color ? { '--title-color': t.color } : {}),
+          ...(t.accent ? { '--title-accent': t.accent } : {}),
+        }}
         onClick={() => onSelect(t.id)}
       >
         {titleLines(t, aspect).map((line, i) => <span key={i}>{line}</span>)}

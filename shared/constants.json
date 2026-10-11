@@ -193,5 +193,9 @@
     "titulo",
     "destaque",
     "rodape"
+  ],
+  "TITLE_ANIMS": [
+    "fade",
+    "pop"
   ]
 }

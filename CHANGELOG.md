@@ -3,6 +3,13 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.2] — 2026-10-11
+
+### Títulos: cor, destaque e animação
+- Cada título agora pode ter **cor do texto e cor de destaque próprias** (6 combinações prontas + seletor de cor livre), em vez de só as 3 cores fixas dos estilos.
+- Nova opção de **entrada**: "Aparece" (como antes) ou **"Salta"** (o texto cresce de 70% a 100% com uma leve mola, além do fade) — títulos novos já nascem com "Salta".
+- A prévia mostra exatamente a mesma cor e animação que vai para o vídeo exportado (regra "prévia = exportação").
+
 ## [0.7.1] — 2026-10-11
 
 ### Correção

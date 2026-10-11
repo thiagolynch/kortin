@@ -57,16 +57,40 @@ function titleStyleLine(name, t, W, H) {
   return `Style: ${[name, t.font, fontSize, assColor(t.primary), assColor(t.primary), outline, back, t.bold ? -1 : 0, 0, 0, 0, 100, 100, 0, 0, t.box ? 3 : 1, bord, t.shadow || 0, 5, margin, margin, 0, 1].join(',')}`;
 }
 
+/**
+ * Cor do texto e cor de destaque por título (opcionais: null = cor do estilo, já cuidada pela
+ * Style T_<nome>). Para estilos com caixa (BorderStyle 3, ex.: Destaque e Rodapé), a cor de
+ * destaque é o preenchimento da caixa (\4c); para o estilo sem caixa (Título), é o contorno (\3c).
+ */
+function titleColorOverride(t, preset) {
+  const tags = [];
+  if (t.color) tags.push(`\\c${assColor(t.color)}`);
+  if (t.accent) tags.push(preset.box ? `\\4c${assColor(t.accent)}\\3c${assColor(t.accent)}` : `\\3c${assColor(t.accent)}`);
+  return tags.join('');
+}
+
+/**
+ * Entrada/saída do título. "fade" é só opacidade (como antes). "pop" soma um salto de escala
+ * (70% → 100% nos primeiros ~220 ms, via \t) a um fade mais curto — fica mais vivo que um
+ * simples aparecer/sumir, sem precisar de mais estilos.
+ */
+function titleAnimTag(t) {
+  if (t.anim === 'pop') return `\\fscx72\\fscy72\\t(0,220,\\fscx100\\fscy100)\\fad(120,200)`;
+  return `\\fad(${TITLE_FADE_MS},${TITLE_FADE_MS})`;
+}
+
 /** Eventos dos títulos: linhas já quebradas pela interface, com entrada e saída suaves. */
 function titleEvents(titles, W, H) {
   return titles
     .filter((t) => t.end > t.start && t.lines.some((l) => l.trim()))
     .map((t) => {
+      const preset = TITLE_PRESETS[t.style] || TITLE_PRESETS.titulo;
       const x = Math.round(W / 2);
       const y = Math.round(H * Math.min(0.95, Math.max(0.05, t.position ?? 0.5)));
       const text = t.lines.map(escapeText).join('\\N');
+      const override = `\\an5\\pos(${x},${y})${titleColorOverride(t, preset)}${titleAnimTag(t)}`;
       // camada 1: títulos ficam por cima da legenda
-      return `Dialogue: 1,${assTime(t.start)},${assTime(t.end)},T_${t.style},,0,0,0,,{\\an5\\pos(${x},${y})\\fad(${TITLE_FADE_MS},${TITLE_FADE_MS})}${text}`;
+      return `Dialogue: 1,${assTime(t.start)},${assTime(t.end)},T_${t.style},,0,0,0,,{${override}}${text}`;
     });
 }
 

@@ -10,6 +10,20 @@ export const TITLE_STYLES = {
 };
 
 export const TITLE_LIMITS = { minDuration: 0.5, maxDuration: 15, maxLines: C.LIMITS.maxTitleLines, maxChars: C.LIMITS.maxTitleChars };
+export const TITLE_ANIMS = { fade: 'Aparece', pop: 'Salta' };
+
+// Combinações de cor prontas (texto + destaque) para não depender só do seletor nativo do navegador.
+export const TITLE_SWATCHES = [
+  { label: 'Padrão', color: null, accent: null },
+  { label: 'Branco e preto', color: '#ffffff', accent: '#000000' },
+  { label: 'Preto e dourado', color: '#111111', accent: '#f5c94b' },
+  { label: 'Branco e vermelho', color: '#ffffff', accent: '#d62828' },
+  { label: 'Branco e roxo', color: '#ffffff', accent: '#7c3aed' },
+  { label: 'Preto e verde-água', color: '#0b3a39', accent: '#5eead4' },
+];
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+export const sanitizeHex = (v) => (typeof v === 'string' && HEX.test(v) ? v.toLowerCase() : null);
 
 // Caracteres por linha por formato (vertical cabe menos)
 const CHARS = {
@@ -20,7 +34,10 @@ const CHARS = {
 };
 
 export function newTitle(at = 0, style = 'titulo') {
-  return { id: uid(), text: 'Seu título aqui', start: Math.max(0, at), duration: 3, style, position: TITLE_STYLES[style].position };
+  return {
+    id: uid(), text: 'Seu título aqui', start: Math.max(0, at), duration: 3, style,
+    position: TITLE_STYLES[style].position, color: null, accent: null, anim: 'pop',
+  };
 }
 
 /** Quebra o texto em linhas (respeita as quebras digitadas; palavras longas demais são cortadas). */
@@ -57,13 +74,19 @@ export function sanitizeTitles(list) {
       duration: clamp(Number(t.duration) || 3, TITLE_LIMITS.minDuration, TITLE_LIMITS.maxDuration),
       style: TITLE_STYLES[t.style] ? t.style : 'titulo',
       position: clamp(Number(t.position ?? 0.5), 0, 1),
+      color: sanitizeHex(t.color),
+      accent: sanitizeHex(t.accent),
+      anim: C.TITLE_ANIMS.includes(t.anim) ? t.anim : 'fade',
     }));
 }
 
-/** O que vai para a exportação: tempo, linhas prontas, estilo e altura. */
+/** O que vai para a exportação: tempo, linhas prontas, estilo, altura, cor e animação. */
 export function titlesForExport(titles, aspect) {
   return titles
-    .map((t) => ({ start: t.start, end: t.start + t.duration, lines: titleLines(t, aspect), style: t.style, position: t.position }))
+    .map((t) => ({
+      start: t.start, end: t.start + t.duration, lines: titleLines(t, aspect), style: t.style, position: t.position,
+      color: t.color, accent: t.accent, anim: t.anim,
+    }))
     .filter((t) => t.lines.length);
 }
 

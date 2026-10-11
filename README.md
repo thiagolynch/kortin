@@ -44,7 +44,7 @@ Legenda automática e cortes com IA processados **no seu computador** — seus v
 
 - **6 cores prontas** por clipe — Natural, Quente, Frio, Vívido, Vintage e P&B — com "aplicar a todos"
 - **Transição suave** (fade pelo preto) em cada clipe ou em **todas as emendas com um clique**, sem mudar a duração nem dessincronizar a legenda
-- **Títulos** em 3 estilos (Título, Destaque, Rodapé): texto livre por cima do vídeo, arrastável na linha do tempo, com entrada e saída suaves
+- **Títulos** em 3 estilos (Título, Destaque, Rodapé), com **cor própria** (6 combinações prontas ou livre) e **entrada "Aparece" ou "Salta"**: texto livre por cima do vídeo, arrastável na linha do tempo
 - **O que você vê é o que sai**: a prévia usa as mesmas matrizes de cor e o mesmo tamanho de fonte do vídeo exportado
 
 ### 💬 Legenda automática (IA no seu PC)

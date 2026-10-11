@@ -538,13 +538,25 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .cap-overlay { z-index: 3; }
 .frame-empty { z-index: 4; }
 .title-overlay { position: absolute; left: 6%; right: 6%; transform: translateY(-50%); z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center; line-height: 1.562; /* = altura de linha da libass */ font-family: 'Montserrat', sans-serif; cursor: pointer; animation: title-in .2s ease-out; }
+.title-overlay.title-anim-pop { animation: title-pop .3s cubic-bezier(.2, 1.4, .4, 1); }
 .title-overlay span { display: inline-block; padding: 0 var(--pad); white-space: nowrap; } /* as linhas já vêm quebradas: iguais à exportação */
 .title-overlay.selected { outline: 1px dashed #ffffff88; outline-offset: 4px; border-radius: 4px; }
-.title-titulo { color: #fff; font-weight: 800; text-shadow: 0 0 .06em #000, 0 0 .06em #000, .03em .04em 0 #0008; }
-.title-destaque span { color: #111; background: #ffe14d; font-weight: 800; padding: calc(var(--pad) * .55) var(--pad); }
-.title-rodape span { color: #fff; background: #0b0d12bf; font-weight: 700; padding: calc(var(--pad) * .55) var(--pad); }
+/* --title-color / --title-accent: cor custom do título (opcional); sem elas, cada estilo usa seu padrão. */
+.title-titulo { color: var(--title-color, #fff); font-weight: 800; text-shadow: 0 0 .06em var(--title-accent, #000), 0 0 .06em var(--title-accent, #000), .03em .04em 0 #0008; }
+.title-destaque span { color: var(--title-color, #111); background: var(--title-accent, #ffe14d); font-weight: 800; padding: calc(var(--pad) * .55) var(--pad); }
+.title-rodape span { color: var(--title-color, #fff); background: var(--title-accent, #0b0d12bf); font-weight: 700; padding: calc(var(--pad) * .55) var(--pad); }
 .title-overlay.title-destaque, .title-overlay.title-rodape { gap: 0; }
 @keyframes title-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes title-pop { from { opacity: 0; transform: translateY(-50%) scale(.7); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
+
+.title-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.title-swatch {
+  width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: var(--muted); padding: 0; position: relative; overflow: hidden;
+}
+.title-swatch.active { outline: 2px solid var(--accent); outline-offset: 2px; }
+.title-swatch-custom { border-style: dashed; }
+.title-swatch-custom input[type='color'] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
 .title-editor { display: flex; flex-direction: column; gap: 10px; }
 .title-text { width: 100%; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px; font: inherit; }
 .title-times { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
