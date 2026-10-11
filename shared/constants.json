@@ -198,5 +198,11 @@
   "TITLE_ANIMS": [
     "fade",
     "pop"
-  ]
+  ],
+  "ZOOM_STYLES": [
+    "none",
+    "in",
+    "out"
+  ],
+  "ZOOM_MAX": 1.12
 }

@@ -3,6 +3,17 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.8] — 2026-10-11
+
+### Efeitos visuais: zoom (Ken Burns) e vinheta cinematográfica
+Primeiros efeitos visuais do Kortin além de cor/transição — ponto fraco real apontado numa análise comparativa com o CapCut:
+
+- **Zoom**: "Aproximar" ou "Afastar" ao longo do clipe (estilo Ken Burns), via `zoompan` do FFmpeg — dá vida a um clipe estático sem precisar cortar mais.
+- **Vinheta cinematográfica**: cantos escurecidos + grão sutil e animado (`vignette` + `noise` do FFmpeg), um toggle só, pensado pra dar textura de filme sem virar um efeito pesado.
+- Os dois entram por clipe, junto dos outros ajustes (cor, fade, transição) no painel de Propriedades, e combinam entre si e com tudo que já existia.
+
+**Limitação honesta**: a prévia mostra o zoom em tempo real (mesma curva matemática da exportação) e a vinheta escurecendo os cantos, mas o grão da prévia é só uma aproximação visual — o grão real, animado e com textura de ruído de verdade, só aparece no vídeo exportado.
+
 ## [0.7.7] — 2026-10-11
 
 ### Legenda automática: cor customizável, palavras-chave em destaque e empilhamento

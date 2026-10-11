@@ -61,6 +61,29 @@ function colorFilter(name) {
  */
 const HDR_TONEMAP = 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p';
 
+/**
+ * Zoom lento (Ken Burns): "in" começa no tamanho normal e aproxima até ZOOM_MAX ao longo do
+ * clipe; "out" é o inverso. zoompan processa quadro a quadro (d=1), então o zoom acompanha o
+ * vídeo (não é feito para uma imagem só) — "on" é o número do quadro de saída, contado desde 0.
+ * Aplicado depois de já estar no tamanho final (W×H) do vídeo, pra zoompan não precisar escalar
+ * o quadro de entrada todo de novo.
+ */
+function zoomFilter(c, dur, fps, W, H) {
+  if (c.zoom !== 'in' && c.zoom !== 'out') return '';
+  const frames = Math.max(1, Math.round(dur * fps));
+  const step = (C.ZOOM_MAX - 1) / frames;
+  const zoomExpr = c.zoom === 'in'
+    ? `if(eq(on\\,0)\\,1\\,min(zoom+${step.toFixed(6)}\\,${C.ZOOM_MAX}))`
+    : `if(eq(on\\,0)\\,${C.ZOOM_MAX}\\,max(zoom-${step.toFixed(6)}\\,1))`;
+  return `zoompan=z='${zoomExpr}':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${fps}`;
+}
+
+/** Vinheta cinematográfica (cantos escurecidos) + grão sutil e animado, pra dar textura de filme. */
+function vignetteFilter(c) {
+  if (!c.vignette) return '';
+  return 'vignette=PI/4,noise=alls=6:allf=t+u';
+}
+
 /** Fade da imagem (pelo preto) no começo/fim do clipe, dentro da duração do clipe. */
 function videoFades(c, dur) {
   const fi = Math.min(c.videoFadeIn || 0, dur / 2);
@@ -79,8 +102,10 @@ function videoChain(i, c, { W, H, fps, fit }) {
   const color = colorFilter(c.filter);
   const fades = videoFades(c, dur);
   const tonemap = c.hdr ? `${HDR_TONEMAP},` : '';
+  const zoom = zoomFilter(c, dur, fps, W, H);
+  const vignette = vignetteFilter(c);
   // tpad garante pelo menos 1 quadro em clipes muito curtos (ex.: 0,1 s a 4x)
-  const tail = `setsar=1,${tonemap}${color ? `${color},` : ''}fps=${fps},format=yuv420p,tpad=stop_mode=clone:stop_duration=${n(1 / fps)},trim=duration=${n(dur)},setpts=PTS-STARTPTS${fades ? `,${fades}` : ''}[v${i}]`;
+  const tail = `setsar=1,${tonemap}${color ? `${color},` : ''}fps=${fps},format=yuv420p${zoom ? `,${zoom}` : ''}${vignette ? `,${vignette}` : ''},tpad=stop_mode=clone:stop_duration=${n(1 / fps)},trim=duration=${n(dur)},setpts=PTS-STARTPTS${fades ? `,${fades}` : ''}[v${i}]`;
   if (fit === 'cover') {
     return [`${src}${pts},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},${tail}`];
   }
@@ -223,4 +248,6 @@ function buildConcatArgs(listFile, opts) {
 
 const INTERMEDIATE_CRF = 12;
 
-module.exports = { atempoChain, outDuration, frameAccurate, colorFilter, buildGraph, buildExportArgs, buildConcatArgs };
+module.exports = {
+  atempoChain, outDuration, frameAccurate, colorFilter, zoomFilter, vignetteFilter, buildGraph, buildExportArgs, buildConcatArgs,
+};

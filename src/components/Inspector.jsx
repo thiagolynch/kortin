@@ -1,5 +1,6 @@
 import {
-  FILTERS, FILTER_LABELS, MAX_FADE, MAX_VIDEO_FADE, MAX_VOLUME, MIN_CLIP, SPEEDS, clipLength, formatSpeed, formatTime, sourceTime,
+  FILTERS, FILTER_LABELS, MAX_FADE, MAX_VIDEO_FADE, MAX_VOLUME, MIN_CLIP, SPEEDS, ZOOM_LABELS, clipLength, formatSpeed, formatTime,
+  sourceTime,
 } from '../lib/timeline';
 import { filterCss } from './ColorFilters';
 import { Icon } from './Icons';
@@ -207,6 +208,30 @@ function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDel
           </div>
         </div>
 
+        <div className="insp-section">
+          <label className="insp-section-label">Zoom</label>
+          <div className="speed-chips">
+            {Object.entries(ZOOM_LABELS).map(([k, l]) => (
+              <button
+                key={k}
+                className={(clip.zoom || 'none') === k ? 'active' : ''}
+                onClick={() => (clip.zoom || 'none') !== k && edit.commit({ zoom: k })}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label className="switch insp-switch" title="Cantos escurecidos + grão sutil, pra dar textura de filme. Aplicado na exportação.">
+          <input
+            type="checkbox"
+            checked={!!clip.vignette}
+            onChange={(e) => edit.commit({ vignette: e.target.checked })}
+          />
+          <span>Vinheta cinematográfica <small className="muted">(na exportação)</small></span>
+        </label>
+
         <label className={`switch insp-switch${clip.hasAudio ? '' : ' disabled'}`} title="Remove chiado e barulho constante de fundo. Aplicado na exportação.">
           <input
             type="checkbox"
@@ -229,7 +254,7 @@ function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDel
           <button
             className="btn"
             onClick={onReset}
-            disabled={clip.inPoint === 0 && clip.outPoint === clip.duration && speed === 1 && !clip.fadeIn && !clip.fadeOut && (clip.volume ?? 1) === 1 && !clip.denoise && (clip.filter || 'natural') === 'natural' && !clip.videoFadeIn && !clip.videoFadeOut}
+            disabled={clip.inPoint === 0 && clip.outPoint === clip.duration && speed === 1 && !clip.fadeIn && !clip.fadeOut && (clip.volume ?? 1) === 1 && !clip.denoise && (clip.filter || 'natural') === 'natural' && !clip.videoFadeIn && !clip.videoFadeOut && (clip.zoom || 'none') === 'none' && !clip.vignette}
             title="Volta o clipe ao original: sem cortes, velocidade 1x, volume 100%, cor natural, sem transição"
           >
             Restaurar

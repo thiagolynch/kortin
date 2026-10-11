@@ -233,7 +233,7 @@ function Editor() {
     if (!selectedClip) return;
     clipEdit.commit({
       inPoint: 0, outPoint: selectedClip.duration, speed: 1, volume: 1, fadeIn: 0, fadeOut: 0, denoise: false,
-      filter: 'natural', videoFadeIn: 0, videoFadeOut: 0,
+      filter: 'natural', videoFadeIn: 0, videoFadeOut: 0, zoom: 'none', vignette: false,
     });
   }, [clipEdit, selectedClip]);
 

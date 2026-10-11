@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { ASPECTS, locate, videoFadeBlack } from '../lib/timeline';
+import { ASPECTS, locate, videoFadeBlack, zoomScale } from '../lib/timeline';
 import { filterCss } from './ColorFilters';
 import { useDerivedPlayhead } from '../state/playhead';
 import CaptionOverlay from './CaptionOverlay';
@@ -28,11 +28,37 @@ function FadeLayer({ store, segments }) {
   return <div ref={ref} className="frame-fade" aria-hidden="true" />;
 }
 
+/**
+ * Zoom lento (Ken Burns): escreve direto no estilo do wrapper do vídeo a cada quadro (sem
+ * re-renderizar o React), espelhando o mesmo progresso 0→1 que o zoompan da exportação usa.
+ */
+function ZoomLayer({ store, segments, targetRef }) {
+  useEffect(() => {
+    const update = () => {
+      if (!targetRef.current) return;
+      const loc = locate(segments, store.get().time);
+      if (!loc) { targetRef.current.style.transform = ''; return; }
+      const tl = store.get().time - loc.seg.start;
+      const z = zoomScale(loc.seg.clip, tl, loc.seg.len);
+      targetRef.current.style.transform = z !== 1 ? `scale(${z.toFixed(4)})` : '';
+    };
+    update();
+    return store.subscribe(update);
+  }, [store, segments, targetRef]);
+  return null;
+}
+
+/** Vinheta cinematográfica (cantos escurecidos + grão) na prévia: aproximação do vignette+noise da exportação. */
+function VignetteOverlay({ clip }) {
+  return clip?.vignette ? <div className="frame-vignette" aria-hidden="true" /> : null;
+}
+
 function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject, cues, captionSettings, children }) {
   // clipe atual: só muda quando o cursor passa de um clipe para outro
   const index = useDerivedPlayhead(player.store, (t) => locate(segments, t)?.index ?? -1, [segments]);
   const current = segments[index]?.clip;
   const wrapRef = useRef(null);
+  const zoomRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const a = ASPECTS[aspect];
 
@@ -59,15 +85,19 @@ function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject
     <div className="preview" ref={wrapRef}>
       <div className="frame" style={{ width: box.w, height: box.h }}>
         {fit === 'blur' && <BlurBackdrop clip={current} />}
-        <video
-          ref={player.videoRef}
-          onLoadedMetadata={player.onLoadedMetadata}
-          className={`frame-video fit-${fit}`}
-          style={{ filter: filterCss(current?.filter) }}
-          playsInline
-          preload="auto"
-          crossOrigin="anonymous"
-        />
+        <div ref={zoomRef} className="frame-zoom-wrap">
+          <video
+            ref={player.videoRef}
+            onLoadedMetadata={player.onLoadedMetadata}
+            className={`frame-video fit-${fit}`}
+            style={{ filter: filterCss(current?.filter) }}
+            playsInline
+            preload="auto"
+            crossOrigin="anonymous"
+          />
+        </div>
+        <ZoomLayer store={player.store} segments={segments} targetRef={zoomRef} />
+        <VignetteOverlay clip={current} />
         <FadeLayer store={player.store} segments={segments} />
         <CaptionOverlay cues={cues} store={player.store} settings={captionSettings} width={box.w} height={box.h} />
         {children?.(box)}
