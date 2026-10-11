@@ -93,6 +93,13 @@ jobs:
             release/*.yml
             release/*.blockmap
 
+      - name: Cópias com nome fixo (link direto no README)
+        shell: bash
+        run: |
+          VER="${{ steps.v.outputs.version }}"
+          cp "release/Kortin-Instalador-$VER.exe" release/Kortin-Instalador.exe
+          cp "release/Kortin-Portatil-$VER.exe" release/Kortin-Portatil.exe
+
       - name: Notas da versão (seção do CHANGELOG)
         shell: bash
         run: |

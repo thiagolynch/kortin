@@ -6,14 +6,14 @@
 
 **O editor de vídeo sem pegadinhas, para quem produz vídeo curto.**<br/>
 Sem anúncios, sem marca d'água, sem assinatura para salvar o seu próprio vídeo.<br/>
-Legenda automática e cortes com IA que rodam **no seu computador** — nada vai para a nuvem.
+Legenda automática e cortes com IA processados **no seu computador** — seus vídeos não vão para a nuvem.
 
 [![Última versão](https://img.shields.io/github/v/release/thiagolynch/kortin?label=vers%C3%A3o&color=22d3ee)](https://github.com/thiagolynch/kortin/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/thiagolynch/kortin/build-windows.yml?branch=main&label=build)](https://github.com/thiagolynch/kortin/actions)
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
-![Offline](https://img.shields.io/badge/IA-100%25%20local-a78bfa)
+![Processamento local](https://img.shields.io/badge/IA-processamento%20local-a78bfa)
 
-**[⬇️ Baixar para Windows](https://github.com/thiagolynch/kortin/releases/latest)** · [Novidades](CHANGELOG.md) · [Arquitetura](docs/ARQUITETURA.md)
+**[⬇️ Baixar o instalador para Windows](https://github.com/thiagolynch/kortin/releases/latest/download/Kortin-Instalador.exe)** · [versão portátil](https://github.com/thiagolynch/kortin/releases/latest/download/Kortin-Portatil.exe) · [Novidades](CHANGELOG.md) · [Arquitetura](docs/ARQUITETURA.md)
 
 <img src="docs/img/editor.webp" alt="Editor do Kortin com linha do tempo, onda sonora e música de fundo" width="900" />
 
@@ -26,7 +26,7 @@ Legenda automática e cortes com IA que rodam **no seu computador** — nada vai
 - 🚫 **Nunca coloca marca d'água** no seu vídeo.
 - 🆓 **Exportar é sempre grátis**, em qualquer formato e na qualidade máxima.
 - 🔒 **Seus vídeos não saem do seu PC**: edição, legenda e cortes com IA rodam localmente.
-- 📴 **Funciona offline** e sem limite de uso da legenda automática — sem créditos.
+- 📴 **Funciona offline** e sem limite de uso da legenda automática — sem créditos. Só o primeiro uso da legenda precisa de internet, para baixar o modelo de IA (de 148 a 574 MB, uma única vez).
 - 🙅 **Sem cadastro** e sem anúncios.
 
 ## Recursos
@@ -73,10 +73,13 @@ Legenda automática e cortes com IA que rodam **no seu computador** — nada vai
 
 ## Baixar e instalar
 
-1. Abra a página de **[versões](https://github.com/thiagolynch/kortin/releases/latest)** e baixe:
-   - `Kortin-Instalador-x.y.z.exe` — instala e se atualiza sozinho (recomendado)
-   - `Kortin-Portatil-x.y.z.exe` — roda sem instalar
-2. O app ainda não tem certificado de assinatura, então o Windows pode mostrar *"O Windows protegeu o computador"*: clique em **Mais informações → Executar assim mesmo**.
+1. Baixe a versão mais recente:
+   - **[Kortin-Instalador.exe](https://github.com/thiagolynch/kortin/releases/latest/download/Kortin-Instalador.exe)** — instala e se atualiza sozinho (recomendado)
+   - **[Kortin-Portatil.exe](https://github.com/thiagolynch/kortin/releases/latest/download/Kortin-Portatil.exe)** — roda sem instalar (não se atualiza sozinho)
+
+   Versões anteriores e notas de cada uma: [Releases](https://github.com/thiagolynch/kortin/releases).
+2. Na primeira vez que usar a legenda automática, o Kortin pede para baixar o modelo de IA (uma vez só, precisa de internet). Depois disso, tudo funciona offline.
+3. O app ainda não tem certificado de assinatura, então o Windows pode mostrar *"O Windows protegeu o computador"*: clique em **Mais informações → Executar assim mesmo**.
 
 **Requisitos:** Windows 10 ou 11 (64 bits). A legenda automática roda em qualquer processador; com processador recente, os modelos maiores ficam mais rápidos.
 
@@ -93,7 +96,7 @@ Legenda automática e cortes com IA que rodam **no seu computador** — nada vai
 
 ## Privacidade e segurança
 
-- **Nada sai do seu computador**: vídeo, áudio e transcrições são processados localmente. A internet só é usada para baixar os modelos de IA (uma vez) e as atualizações.
+- **Seus vídeos não saem do seu computador**: vídeo, áudio e transcrições são processados localmente. A internet só é usada para baixar os modelos de IA (uma vez, quando você pede) e as atualizações do app.
 - A interface roda isolada (sandbox, CSP, sem acesso direto ao sistema); o app só lê e grava arquivos que **você** escolheu, recusa caminhos de rede e valida tudo antes de chegar ao FFmpeg.
 - Modelos de IA baixados de uma **versão fixa** e conferidos por **SHA-256**; arquivo adulterado é apagado.
 - Detalhes em [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
@@ -107,6 +110,7 @@ Legenda automática e cortes com IA que rodam **no seu computador** — nada vai
 | 0.4 | Refatoração: segurança, desempenho e testes | ✅ |
 | 0.5 | Projetos portáteis, cache, modelos verificados, licenças | ✅ |
 | **0.6** | **Cortes sugeridos e música de fundo com abaixamento** | ✅ |
+| 0.6.1 | Preparação do beta: diagnóstico do PC e link direto de download | ✅ |
 | próximas | Beta fechado · textos e títulos · transições · brand kit e templates · lote para agências | 🔜 |
 
 Histórico completo no [CHANGELOG](CHANGELOG.md).
