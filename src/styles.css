@@ -64,9 +64,11 @@ button { font: inherit; color: inherit; }
 .btn {
   display: inline-flex; align-items: center; gap: 6px; justify-content: center;
   height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
-  background: var(--panel-2); border: 1px solid var(--line-2); transition: background .12s, border-color .12s, opacity .12s;
+  background: var(--panel-2); border: 1px solid var(--line-2);
+  transition: background .12s, border-color .12s, opacity .12s, transform .08s, box-shadow .12s;
 }
 .btn:hover:not(:disabled) { background: #252935; border-color: #3d4354; }
+.btn:active:not(:disabled) { transform: scale(.96); }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 650; }
 .btn.primary:hover:not(:disabled) { background: #5ee3f5; border-color: #5ee3f5; }
@@ -79,20 +81,30 @@ button { font: inherit; color: inherit; }
 .icon-btn {
   width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px;
   background: transparent; border: 1px solid transparent; cursor: pointer; color: #c6cad6;
+  transition: background .12s, border-color .12s, color .12s, transform .08s;
 }
 .icon-btn:hover:not(:disabled) { background: var(--panel-2); border-color: var(--line-2); color: var(--text); }
+.icon-btn:active:not(:disabled) { transform: scale(.92); }
 .icon-btn:disabled { opacity: .35; cursor: default; }
 
 .segmented { display: flex; background: var(--bg); border: 1px solid var(--line-2); border-radius: 9px; padding: 3px; gap: 3px; }
 .segmented button {
   flex: 1; border: 0; background: transparent; border-radius: 6px; padding: 8px 10px; cursor: pointer;
   color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 600;
+  transition: background .12s, color .12s, box-shadow .12s;
 }
 .segmented button small { font-weight: 400; font-size: 11px; color: var(--muted); }
 .segmented button:hover { color: var(--text); }
 .segmented button.active { background: var(--panel-2); color: var(--text); box-shadow: 0 0 0 1px var(--line-2); }
 .segmented button.active small { color: #b7bccb; }
 .segmented.compact button { padding: 4px 10px; font-size: 12px; }
+
+/* Foco por teclado: um anel consistente (Tab navega o app inteiro, não só a lista de cortes). */
+.btn:focus-visible, .icon-btn:focus-visible, .segmented button:focus-visible,
+.select:focus-visible, .panel-tabs button:focus-visible, .bin-item:focus-visible,
+input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
 
 .select {
   height: 30px; background: var(--bg); color: var(--text); border: 1px solid var(--line-2);
@@ -122,9 +134,9 @@ button { font: inherit; color: inherit; }
 .bin-item { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .bin-thumb {
   position: relative; aspect-ratio: 16 / 10; border-radius: 8px; background: #0b0c10 center / cover no-repeat;
-  border: 1px solid var(--line-2); overflow: hidden;
+  border: 1px solid var(--line-2); overflow: hidden; transition: border-color .15s, transform .15s, box-shadow .15s;
 }
-.bin-item:hover .bin-thumb { border-color: var(--accent); }
+.bin-item:hover .bin-thumb { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 18px #0007; }
 .bin-dur { position: absolute; right: 4px; bottom: 4px; font-size: 10px; background: #000a; padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
 .bin-mute { position: absolute; left: 4px; bottom: 4px; background: #000a; border-radius: 4px; padding: 2px 3px; display: grid; }
 .bin-add {
@@ -244,7 +256,7 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .tl-empty { position: absolute; left: 16px; right: 16px; top: 0; bottom: 0; border: 1px dashed var(--line-2); border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
 .tl-clip {
   position: absolute; top: 0; height: 100%; border-radius: 7px; overflow: hidden; cursor: grab;
-  background: #1b2333; box-shadow: inset 0 0 0 1px #ffffff22;
+  background: #1b2333; box-shadow: inset 0 0 0 1px #ffffff22; transition: box-shadow .12s;
 }
 .tl-clip-thumbs { position: absolute; left: 0; right: 0; top: 0; height: 64%; background: #23314a left center / auto 100% repeat-x; }
 .tl-clip-thumbs::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, #000a 0%, transparent 55%); }
@@ -296,12 +308,18 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .toast {
   position: fixed; left: 50%; bottom: 256px; transform: translateX(-50%); z-index: 60;
   background: var(--panel-2); border: 1px solid var(--line-2); padding: 10px 16px; border-radius: 10px; max-width: 70vw;
-  box-shadow: 0 10px 30px #0009;
+  box-shadow: 0 10px 30px #0009; animation: toast-in .2s ease-out;
 }
+.toast.leaving { animation: toast-out .25s ease-in forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+@keyframes toast-out { from { opacity: 1; transform: translateX(-50%) translateY(0); } to { opacity: 0; transform: translateX(-50%) translateY(8px); } }
 .drop-overlay {
   position: fixed; inset: 10px; z-index: 40; border: 2px dashed var(--accent); border-radius: 16px;
   background: #22d3ee14; display: grid; place-items: center; pointer-events: none; font-size: 18px; font-weight: 700; color: var(--accent);
+  animation: drop-in .15s ease-out, drop-pulse 1.6s ease-in-out .15s infinite;
 }
+@keyframes drop-in { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: scale(1); } }
+@keyframes drop-pulse { 0%, 100% { border-color: var(--accent); background: #22d3ee14; } 50% { border-color: var(--accent-2); background: #22d3ee22; } }
 .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -376,6 +394,7 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .panel-tabs button {
   flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px;
   background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-weight: 600;
+  transition: color .15s, border-color .15s;
 }
 .panel-tabs button:hover { color: var(--text); }
 .panel-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }

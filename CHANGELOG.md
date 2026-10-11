@@ -3,6 +3,18 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.3] — 2026-10-11
+
+### Polimento de interface
+- **Avisos (toasts)** aparecem e somem com uma transição suave, em vez de surgir/sumir de uma vez.
+- **Botões** reagem ao clique (leve encolhimento) e ganharam uma transição mais macia no hover; o mesmo para as abas e os seletores de estilo/formato.
+- **Anel de foco pelo teclado** consistente em botões, abas, seletores e campos — útil para quem navega sem mouse.
+- **Miniaturas da mídia** sobem levemente e ganham sombra ao passar o mouse, em vez de só trocar a borda.
+- **Arrastar um arquivo para a janela** agora anima a entrada do aviso e pulsa suavemente enquanto o arquivo está sobre a janela.
+- Seleção de clipe na linha do tempo não "pisca" mais — a borda de seleção também transiciona.
+
+Nenhuma mudança de comportamento, só de sensação de uso (CSS e uma pequena mudança no aviso de notificação).
+
 ## [0.7.2] — 2026-10-11
 
 ### Títulos: cor, destaque e animação

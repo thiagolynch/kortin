@@ -43,15 +43,23 @@ function writeFlag(key, value) {
   try { localStorage.setItem(key, value); } catch { /* sem armazenamento: tudo bem */ }
 }
 
+const TOAST_LEAVE_MS = 260; // = duração da animação toast-out no CSS
+
+/** O aviso some suavindo (não desmonta de uma vez): mostra, espera, marca "saindo" e só então some. */
 function useToast() {
-  const [toast, setToast] = useState('');
-  const timer = useRef(0);
+  const [toast, setToast] = useState({ text: '', leaving: false });
+  const hideTimer = useRef(0);
+  const leaveTimer = useRef(0);
   const notify = useCallback((msg) => {
-    setToast(msg);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setToast(''), 4000);
+    clearTimeout(hideTimer.current);
+    clearTimeout(leaveTimer.current);
+    setToast({ text: msg, leaving: false });
+    hideTimer.current = setTimeout(() => {
+      setToast((t) => ({ ...t, leaving: true }));
+      leaveTimer.current = setTimeout(() => setToast({ text: '', leaving: false }), TOAST_LEAVE_MS);
+    }, 4000);
   }, []);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => () => { clearTimeout(hideTimer.current); clearTimeout(leaveTimer.current); }, []);
   return [toast, notify];
 }
 
@@ -600,7 +608,7 @@ function Editor() {
 
       <ColorFilterDefs />
       {dragOver && <div className="drop-overlay"><div>Solte para importar</div></div>}
-      {toast && <div className="toast" role="status">{toast}</div>}
+      {toast.text && <div className={`toast${toast.leaving ? ' leaving' : ''}`} role="status">{toast.text}</div>}
       {exporting && (
         <ExportDialog
           clips={clips}
