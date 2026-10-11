@@ -6,15 +6,34 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { FFMPEG } = require('../ffmpeg/binary');
+const { ensureVerified, markVerified, markerPath, IntegrityError } = require('./integrity');
 
-const HF = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
+// Revisão FIXA do repositório oficial do whisper.cpp no Hugging Face (não "main"):
+// o conteúdo de uma revisão não muda, e o SHA-256 abaixo confere byte a byte.
+// Para trocar de revisão: atualizar REVISION + bytes/sha256 e rodar `npm run verify:models` (o CI roda).
+const REVISION = '5359861c739e955e79d9a303bcbc70fb988958b1';
+const HF = `https://huggingface.co/ggerganov/whisper.cpp/resolve/${REVISION}`;
 
 /** Modelos oferecidos: baixados uma única vez, do repositório oficial do whisper.cpp */
 const MODELS = {
-  rapido: { file: 'ggml-base.bin', sizeMB: 148, label: 'Rápido', hint: 'Bom para fala clara, roda em qualquer PC' },
-  preciso: { file: 'ggml-small.bin', sizeMB: 488, label: 'Preciso', hint: 'Acerta mais nomes e gírias; leva ~3x mais tempo' },
-  maximo: { file: 'ggml-large-v3-turbo-q5_0.bin', sizeMB: 574, label: 'Máximo', hint: 'O mais preciso; ideal para PC com processador recente' },
+  rapido: {
+    file: 'ggml-base.bin', sizeMB: 148, bytes: 147951465,
+    sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
+    label: 'Rápido', hint: 'Bom para fala clara, roda em qualquer PC',
+  },
+  preciso: {
+    file: 'ggml-small.bin', sizeMB: 488, bytes: 487601967,
+    sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b',
+    label: 'Preciso', hint: 'Acerta mais nomes e gírias; leva ~3x mais tempo',
+  },
+  maximo: {
+    file: 'ggml-large-v3-turbo-q5_0.bin', sizeMB: 574, bytes: 574041195,
+    sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2',
+    label: 'Máximo', hint: 'O mais preciso; ideal para PC com processador recente',
+  },
 };
+
+const modelUrl = (key) => `${HF}/${MODELS[key].file}`;
 
 // Frase de exemplo que ensina o modelo a pontuar em português
 const PROMPTS = {
@@ -52,7 +71,9 @@ function modelStatus(modelsDir) {
   return Object.fromEntries(
     Object.entries(MODELS).map(([key, m]) => {
       const p = path.join(modelsDir, m.file);
-      return [key, { ...m, installed: fs.existsSync(p) && fs.statSync(p).size > 10e6 }];
+      // instalado = tamanho exato; o hash é conferido no download e antes do primeiro uso
+      const { sha256, bytes, ...info } = m;
+      return [key, { ...info, installed: fs.existsSync(p) && fs.statSync(p).size === bytes }];
     })
   );
 }
@@ -66,10 +87,13 @@ async function downloadModel(modelsDir, key, onProgress, fetchImpl = fetch, sign
   const dest = modelPath(modelsDir, key);
   fs.mkdirSync(modelsDir, { recursive: true });
   const part = `${dest}.part`;
-  const res = await fetchImpl(`${HF}/${m.file}`, { signal });
+  const res = await fetchImpl(modelUrl(key), { signal });
   if (!res.ok || !res.body) throw new Error(`Não foi possível baixar o modelo (HTTP ${res.status}).`);
-  const total = Number(res.headers.get('content-length')) || m.sizeMB * 1e6;
+  const total = m.bytes;
   const out = fs.createWriteStream(part);
+  let writeError = null;
+  out.on('error', (e) => { writeError = e; }); // sem ouvinte, um erro de disco derrubaria o processo principal
+  const hash = crypto.createHash('sha256'); // calculado enquanto baixa: sem reler o arquivo
   let received = 0;
   let last = 0;
   try {
@@ -78,7 +102,10 @@ async function downloadModel(modelsDir, key, onProgress, fetchImpl = fetch, sign
       const { done, value } = await reader.read();
       if (done) break;
       received += value.length;
-      if (!out.write(Buffer.from(value))) await new Promise((r) => out.once('drain', r));
+      if (received > m.bytes) throw new IntegrityError('O download do modelo veio maior que o esperado e foi descartado.');
+      hash.update(value);
+      if (writeError) throw writeError;
+      if (!out.write(Buffer.from(value))) await new Promise((r) => { out.once('drain', r); out.once('error', r); });
       const now = Date.now();
       if (onProgress && now - last > 200) {
         last = now;
@@ -86,16 +113,24 @@ async function downloadModel(modelsDir, key, onProgress, fetchImpl = fetch, sign
       }
     }
     await new Promise((r, j) => out.end((e) => (e ? j(e) : r())));
+    if (writeError) throw writeError;
   } catch (err) {
-    out.destroy();
+    // espera o arquivo fechar antes de apagar (no Windows, apagar um arquivo aberto falha)
+    if (!out.closed) await new Promise((r) => { out.once('close', r); out.destroy(); });
     try { fs.unlinkSync(part); } catch {}
     throw err;
   }
-  if (received < 10e6) {
+  if (received !== m.bytes) {
     try { fs.unlinkSync(part); } catch {}
     throw new Error('O download veio incompleto. Verifique a internet e tente de novo.');
   }
+  if (hash.digest('hex') !== m.sha256) {
+    try { fs.unlinkSync(part); } catch {}
+    throw new IntegrityError('O modelo baixado não confere com a assinatura esperada (SHA-256) e foi descartado por segurança.');
+  }
+  try { fs.unlinkSync(markerPath(dest)); } catch { /* sem marca antiga */ }
   fs.renameSync(part, dest);
+  markVerified(dest, m);
   if (onProgress) onProgress(1, received);
   return dest;
 }
@@ -144,11 +179,14 @@ function parseWords(json) {
  * Transcreve um arquivo. Retorna { words, model, language }.
  * onProgress(0..1) · onSpawn(proc) para permitir cancelar.
  */
-async function transcribe(file, { modelsDir, model = 'rapido', language = 'pt', onProgress, onSpawn } = {}) {
+async function transcribe(file, { modelsDir, model = 'rapido', language = 'pt', onProgress, onSpawn, verify = true } = {}) {
   const bins = binaries();
   if (!bins.length) throw new Error('O componente de legenda não está instalado nesta versão do Kortin.');
   const modelFile = modelPath(modelsDir, model);
   if (!fs.existsSync(modelFile)) throw new Error('O modelo de legenda ainda não foi baixado.');
+  // modelos baixados por versões antigas (sem hash) são conferidos uma vez antes do primeiro uso.
+  // `verify: false` existe só para o teste automático, que usa o modelo "tiny" no lugar do "rapido".
+  if (verify) await ensureVerified(modelFile, MODELS[model]);
 
   // A pasta de trabalho fica DENTRO da pasta de modelos, e o whisper roda com caminhos relativos
   // (cwd = pasta de trabalho, modelo em "../arquivo.bin"). Motivo: o whisper.cpp no Windows abre
@@ -208,4 +246,4 @@ function cacheKey(file, model, language) {
   return crypto.createHash('sha1').update(`${file}|${st.size}|${st.mtimeMs}|${model}|${language}`).digest('hex');
 }
 
-module.exports = { MODELS, isAvailable, binaries, modelStatus, modelPath, downloadModel, transcribe, parseWords, cacheKey };
+module.exports = { MODELS, REVISION, modelUrl, isAvailable, binaries, modelStatus, modelPath, downloadModel, transcribe, parseWords, cacheKey };

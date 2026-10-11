@@ -23,7 +23,7 @@ if (!existsSync(tiny)) {
 copyFileSync(tiny, join(models, t.MODELS.rapido.file));
 
 const sample = join(root, 'vendor-src', 'whisper.cpp-v1.9.5', 'samples', 'jfk.wav');
-const r = await t.transcribe(sample, { modelsDir: models, model: 'rapido', language: 'en' });
+const r = await t.transcribe(sample, { modelsDir: models, model: 'rapido', language: 'en', verify: false });
 const text = r.words.map((w) => w.w).join(' ');
 console.log(`${r.words.length} palavras: ${text}`);
 const ok = /country/i.test(text) && r.words.every((w) => w.e > w.s);

@@ -128,8 +128,14 @@ Electron · React · Vite · FFmpeg (via `ffmpeg-static`) · electron-builder
 
 ## Licenças
 
-A fonte Montserrat (legendas) é distribuída sob a SIL Open Font License (`assets/fonts/OFL-Montserrat.txt`).
-O whisper.cpp é MIT; os modelos do Whisper (OpenAI) também são MIT.
+Os componentes de terceiros e suas licenças estão em [`licenses/`](licenses/) e vão dentro do
+instalador (no app: tela de boas-vindas → "Licenças de terceiros").
 
-O FFmpeg incluído é distribuído sob a licença GPL. Antes de vender o app ou fechar o código,
-vale revisar essa questão (dá para trocar por um build LGPL do FFmpeg).
+- **FFmpeg** (Windows: 6.1.1 "essentials" de gyan.dev) é **GPL v3** e roda como processo separado,
+  sem modificações. A GPL não impede vender o Kortin; exige acompanhar o texto da licença e oferecer
+  o código-fonte do FFmpeg — ambos estão em `licenses/AVISOS-DE-TERCEIROS.txt`
+  (regenerado a cada build por `npm run notices`).
+- **whisper.cpp** e os modelos Whisper: MIT. Modelos baixados de uma revisão fixa, com SHA-256 conferido.
+- **Montserrat**: SIL Open Font License 1.1.
+
+> Antes de cobrar pelo app, vale uma revisão jurídica da conformidade (GPL, marcas, patentes de H.264).
