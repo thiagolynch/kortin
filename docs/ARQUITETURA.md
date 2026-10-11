@@ -1,4 +1,4 @@
-# Arquitetura do Kortin (v0.6)
+# Arquitetura do Kortin (v0.7)
 
 ## Fronteiras
 
@@ -36,6 +36,9 @@ shared/constants.json — limites e listas usados pelos dois lados
 9. **Modelos de IA íntegros.** URL em revisão fixa do Hugging Face + tamanho e SHA-256 no código; conferido no download e antes do primeiro uso; o CI confere os hashes contra o servidor (`npm run verify:models`).
 10. **Cortes sugeridos são dados, não ações.** `suggestCuts` (puro) lista pausas, vícios e frases reiniciadas com motivo, tempo no arquivo e posição na timeline; a decisão (aceito/rejeitado) fica na interface por id estável; `applyCuts` aplica só os aceitos, num único passo de desfazer.
 11. **Música com abaixamento pela própria voz.** Na exportação, a voz alimenta um `sidechaincompress` na música (−12 dB, ataque 20 ms, retorno 400 ms), seguido de `alimiter`. A música entra com `-stream_loop -1` e é cortada no total; na exportação em partes, só no passo final (sem emendas). A prévia aproxima o abaixamento pelos clipes com som.
+
+12. **Prévia = exportação.** Cor: a mesma matriz 3×3 (`shared/constants.json` → `FILTERS`) vira `feColorMatrix` em sRGB na prévia e `colorchannelmixer` no FFmpeg. Texto: o tamanho do `.ass` é convertido para CSS dividindo por `ASS_FONT_EM` (1,562 para a Montserrat: a libass usa win ascent + descent); a altura de linha da prévia também é 1,562. Títulos: as linhas são quebradas uma vez (`lib/titles.js`) e a mesma lista vai para a prévia e para o `.ass`.
+13. **Transição não muda o tempo.** O fade pelo preto acontece dentro do clipe (filtro `fade` depois do `trim`), então a legenda, os cortes sugeridos e a música não precisam ser recalculados.
 
 ## Testes
 

@@ -96,8 +96,11 @@ function exportVideo(timeline, opts, onProgress, onEncoder) {
     return { res, encoder, fellBack };
   };
 
-  const captionFilter = opts.captions?.cues?.length
-    ? ass.prepareCaptionDir(workDir, opts.captions.cues, opts.captions.settings || {}, opts.width, opts.height)
+  // legenda e títulos vão no mesmo .ass (uma passada do filtro "ass")
+  const cues = opts.captions?.cues || [];
+  const titles = opts.titles || [];
+  const captionFilter = cues.length || titles.length
+    ? ass.prepareCaptionDir(workDir, cues, opts.captions?.settings || {}, opts.width, opts.height, titles)
     : null;
 
   // Um passo só: grafo completo (projetos pequenos, o caso comum)

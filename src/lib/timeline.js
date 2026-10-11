@@ -147,7 +147,36 @@ export function mediaToClip(m) {
     fadeIn: 0,
     fadeOut: 0,
     denoise: false,
+    filter: 'natural',
+    videoFadeIn: 0,
+    videoFadeOut: 0,
   };
+}
+
+// ---------------- Cor e transições ----------------
+
+export const FILTERS = C.FILTERS;
+export const MAX_VIDEO_FADE = C.MAX_VIDEO_FADE;
+export const FILTER_LABELS = { natural: 'Natural', quente: 'Quente', frio: 'Frio', vivido: 'Vívido', vintage: 'Vintage', pb: 'P&B' };
+
+/** Opacidade da camada preta da transição no instante `tl` dentro do clipe (0 = imagem normal). */
+export function videoFadeBlack(clip, tl) {
+  const len = clipLength(clip);
+  const fi = Math.min(clip.videoFadeIn || 0, len / 2);
+  const fo = Math.min(clip.videoFadeOut || 0, len / 2);
+  let f = 1;
+  if (fi > 0) f = Math.min(f, tl / fi);
+  if (fo > 0) f = Math.min(f, (len - tl) / fo);
+  return 1 - clamp(f, 0, 1);
+}
+
+/** Transição em todas as emendas: fade pelo preto de `d` segundos de cada lado (não muda a duração). */
+export function smoothAllJoins(clips, d = 0.25) {
+  return clips.map((c, i) => ({
+    ...c,
+    videoFadeIn: i > 0 ? d : c.videoFadeIn || 0,
+    videoFadeOut: i < clips.length - 1 ? d : c.videoFadeOut || 0,
+  }));
 }
 
 
@@ -160,7 +189,7 @@ export const musicFields = (m) => (m ? {
   volume: m.volume ?? MUSIC_DEFAULTS.volume, duck: m.duck ?? true, fadeIn: m.fadeIn ?? 0, fadeOut: m.fadeOut ?? 0,
 } : null);
 
-export function serializeProject({ clips, aspect, fit, captions, transcripts, music }) {
+export function serializeProject({ clips, aspect, fit, captions, transcripts, music, titles }) {
   const used = new Set(clips.map((c) => c.path));
   return {
     app: 'kortin',
@@ -168,12 +197,14 @@ export function serializeProject({ clips, aspect, fit, captions, transcripts, mu
     aspect,
     fit,
     // duration: para conferir, ao reabrir em outro lugar, se o vídeo achado é o mesmo
-    clips: clips.map(({ id, path, name, duration, inPoint, outPoint, volume, speed, fadeIn, fadeOut, denoise }) => ({
+    clips: clips.map(({ id, path, name, duration, inPoint, outPoint, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut }) => ({
       id, path, name, duration, inPoint, outPoint,
       volume: volume ?? 1, speed: speed ?? 1, fadeIn: fadeIn ?? 0, fadeOut: fadeOut ?? 0, denoise: !!denoise,
+      filter: filter || 'natural', videoFadeIn: videoFadeIn ?? 0, videoFadeOut: videoFadeOut ?? 0,
     })),
     ...(captions ? { captions } : {}),
     ...(music ? { music: musicFields(music) } : {}),
+    ...(titles?.length ? { titles: titles.map(({ id, text, start, duration, style, position }) => ({ id, text, start, duration, style, position })) } : {}),
     // só as transcrições dos vídeos que estão no projeto
     ...(transcripts
       ? { transcripts: Object.fromEntries(Object.entries(transcripts).filter(([p]) => used.has(p))) }
@@ -224,6 +255,9 @@ export function restoreClips(saved, infoByPath) {
         fadeIn: clamp(c.fadeIn ?? 0, 0, MAX_FADE),
         fadeOut: clamp(c.fadeOut ?? 0, 0, MAX_FADE),
         denoise: !!c.denoise,
+        filter: Object.prototype.hasOwnProperty.call(C.FILTERS, c.filter) ? c.filter : 'natural',
+        videoFadeIn: clamp(c.videoFadeIn ?? 0, 0, C.MAX_VIDEO_FADE),
+        videoFadeOut: clamp(c.videoFadeOut ?? 0, 0, C.MAX_VIDEO_FADE),
       };
     });
 }

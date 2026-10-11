@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { ASPECTS, FITS, QUALITIES, formatTime } from '../lib/timeline';
 import { MAX_CHARS, cuesForExport, deriveCues } from '../lib/captions';
+import { titlesForExport } from '../lib/titles';
 
 /** Configura a exportação e devolve os trabalhos para a fila (a exportação roda em segundo plano). */
 export default function ExportDialog({
-  clips, total, aspect, fit, projectName, segments, transcripts, captionSettings, music, onQueue, onClose,
+  clips, total, aspect, fit, projectName, segments, transcripts, captionSettings, music, titles = [], onQueue, onClose,
 }) {
   const [formats, setFormats] = useState([aspect]);
   const [quality, setQuality] = useState('padrao');
@@ -41,8 +42,8 @@ export default function ExportDialog({
       }
       const q = QUALITIES[quality];
       const encoder = useHw && hardware?.length ? hardware[0].id : 'libx264';
-      const snapshot = clips.map(({ path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise }) => ({
-        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise,
+      const snapshot = clips.map(({ path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut }) => ({
+        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut,
       }));
       // a legenda é montada por formato: no vertical, frases mais curtas
       const captionsFor = (k) => {
@@ -59,6 +60,8 @@ export default function ExportDialog({
           options: {
             width: ASPECTS[k].width, height: ASPECTS[k].height, fit, fps: 30,
             crf: q.crf, preset: q.preset, encoder, output: outputs[i], captions: captionsFor(k),
+            // títulos: as linhas são quebradas para cada formato (vertical cabe menos por linha)
+            ...(titles.length ? { titles: titlesForExport(titles, k).filter((t) => t.start < total) } : {}),
             ...(music ? { music: { path: music.path, volume: music.volume, duck: music.duck, fadeIn: music.fadeIn, fadeOut: music.fadeOut } } : {}),
           },
         }))

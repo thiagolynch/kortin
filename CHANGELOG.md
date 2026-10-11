@@ -3,6 +3,25 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.0] — 2026-10-11
+
+### Cor
+- **6 cores prontas por clipe**: Natural, Quente, Frio, Vívido, Vintage e P&B, com miniatura de cada uma e **aplicar a todos**.
+- A prévia usa **a mesma matriz de cor** da exportação: o que você vê é o que sai.
+
+### Transições
+- **Surge do preto / some no preto** por clipe (até 2 s) e **suavizar todas as emendas** com um clique (0,25 s de cada lado).
+- A transição acontece dentro do clipe: a duração do vídeo não muda e a legenda continua sincronizada.
+
+### Títulos
+- Nova aba **Textos**: títulos em 3 estilos (Título, Destaque e Rodapé), com duração, altura na tela e entrada/saída suaves.
+- Faixa **T** na linha do tempo: arraste o bloco para mudar o momento (um passo de desfazer por arrasto).
+- As linhas são quebradas para cada formato (no vertical cabem menos palavras por linha), e a prévia mostra exatamente as linhas que vão para o vídeo.
+
+### Correções
+- **Tamanho da legenda na prévia**: desde a v0.3, a prévia mostrava a legenda cerca de 56% maior do que ela saía no vídeo (a fonte é medida de forma diferente no navegador e no gravador de legendas). Agora prévia e vídeo batem ao pixel.
+- **Recuperação automática** podia ficar desatualizada enquanto um campo de texto ou controle deslizante estava em edição. Agora grava normalmente.
+
 ## [0.6.1] — 2026-10-11
 
 Preparação para o beta fechado.

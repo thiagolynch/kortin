@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { CAPTION_SIZES, CAPTION_STYLES, cueIndexAt } from '../lib/captions';
+import { ASS_FONT_EM, CAPTION_SIZES, CAPTION_STYLES, cueIndexAt } from '../lib/captions';
 import { useDerivedPlayhead } from '../state/playhead';
 
 // Posição na legenda como um número só: índice da legenda * 1000 + palavra ativa.
@@ -23,11 +23,13 @@ function CaptionOverlay({ cues, store, settings, width, height }) {
   const active = (key % WORD_SLOTS) - 1;
   const preset = CAPTION_STYLES[settings.style] || CAPTION_STYLES.classica;
   const upper = settings.uppercase ?? preset.upper;
-  const fontSize = preset.size * Math.sqrt(width * height) * (CAPTION_SIZES[settings.size] || 1);
+  // mesmo cálculo da exportação (tamanho do .ass), convertido para CSS
+  const assSize = preset.size * Math.sqrt(width * height) * (CAPTION_SIZES[settings.size] || 1);
+  const fontSize = assSize / ASS_FONT_EM;
   return (
     <div
       className={`cap-overlay cap-${settings.style}`}
-      style={{ top: `${settings.position * 100}%`, fontSize, '--bord': `${Math.max(1, fontSize * 0.11)}px` }}
+      style={{ top: `${settings.position * 100}%`, fontSize, '--bord': `${Math.max(1, assSize * 0.11)}px` }}
     >
       <span className="cap-line">
         {cue.words.map((w, i) => (

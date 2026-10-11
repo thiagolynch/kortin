@@ -63,7 +63,7 @@ function Playhead({ store, zoom, scrollRef }) {
 
 function Timeline({
   segments, total, store, zoom, setZoom, selectedId, snap, peaksByPath, cues = [],
-  cutMarks, isCutOn, cutFocus, onCutClick, music,
+  cutMarks, isCutOn, cutFocus, onCutClick, music, titles = [], selectedTitleId, onTitleSelect, titleDrag,
   onSeek, onSelect, trim, onReorder,
 }) {
   const scrollRef = useRef(null);
@@ -145,6 +145,28 @@ function Timeline({
       trimming.current = false;
       setSnapLine(null);
       trim.end();
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  // Títulos: arrastar muda o início (um passo de desfazer por arrasto)
+  const startTitleDrag = (e, t) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onTitleSelect(t.id);
+    const x0 = e.clientX;
+    let began = false;
+    const move = (ev) => {
+      const dx = ev.clientX - x0;
+      if (!began && Math.abs(dx) < 3) return;
+      if (!began) { titleDrag.start(); began = true; }
+      titleDrag.move(t.id, Math.max(0, t.start + dx / zoom));
+    };
+    const up = () => {
+      if (began) titleDrag.end();
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };
@@ -288,6 +310,22 @@ function Timeline({
                 onPointerDown={(e) => { e.stopPropagation(); onSeek(c.start + 0.01); }}
               >
                 {(c.end - c.start) * zoom > 40 && <span>{c.words.map((w) => w.text).join(' ')}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {titles.length > 0 && (
+          <div className="tl-titles" aria-label="Títulos">
+            {titles.map((t) => (
+              <div
+                key={t.id}
+                className={`tl-title${t.id === selectedTitleId ? ' selected' : ''}`}
+                style={{ left: PAD + t.start * zoom, width: Math.max(8, t.duration * zoom - 1) }}
+                title={`${t.text} (arraste para mudar o momento)`}
+                onPointerDown={(e) => startTitleDrag(e, t)}
+              >
+                T · {t.text.split(/\n/)[0]}
               </div>
             ))}
           </div>

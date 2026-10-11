@@ -1,6 +1,7 @@
 // Tradução da linha do tempo para o grafo de filtros do FFmpeg.
 // Funções puras: recebem dados já validados (ver core/security.js) e devolvem texto/argumentos.
 const { encoderArgs } = require('./encoders');
+const C = require('../../../shared/constants.json');
 
 const n = (x) => Number(x).toFixed(3);
 
@@ -38,13 +39,37 @@ function atempoChain(speed) {
   return parts.join(',');
 }
 
+/**
+ * Filtro de cor: a mesma matriz 3x3 que a prévia usa (SVG feColorMatrix em sRGB), aplicada com
+ * colorchannelmixer, mais contraste opcional. Assim o que se vê na prévia é o que sai no vídeo.
+ */
+function colorFilter(name) {
+  const f = C.FILTERS[name];
+  if (!f) return '';
+  const [rr, rg, rb, gr, gg, gb, br, bg, bb] = f.matrix;
+  const mix = `colorchannelmixer=rr=${rr}:rg=${rg}:rb=${rb}:gr=${gr}:gg=${gg}:gb=${gb}:br=${br}:bg=${bg}:bb=${bb}`;
+  return f.contrast ? `${mix},eq=contrast=${f.contrast}` : mix;
+}
+
+/** Fade da imagem (pelo preto) no começo/fim do clipe, dentro da duração do clipe. */
+function videoFades(c, dur) {
+  const fi = Math.min(c.videoFadeIn || 0, dur / 2);
+  const fo = Math.min(c.videoFadeOut || 0, dur / 2);
+  const out = [];
+  if (fi > 0) out.push(`fade=t=in:st=0:d=${n(fi)}`);
+  if (fo > 0) out.push(`fade=t=out:st=${n(dur - fo)}:d=${n(fo)}`);
+  return out.join(',');
+}
+
 function videoChain(i, c, { W, H, fps, fit }) {
   const speed = c.speed || 1;
   const dur = durOf(c);
   const src = `[${i}:v:0]`;
   const pts = speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${speed.toFixed(5)}`;
+  const color = colorFilter(c.filter);
+  const fades = videoFades(c, dur);
   // tpad garante pelo menos 1 quadro em clipes muito curtos (ex.: 0,1 s a 4x)
-  const tail = `setsar=1,fps=${fps},format=yuv420p,tpad=stop_mode=clone:stop_duration=${n(1 / fps)},trim=duration=${n(dur)},setpts=PTS-STARTPTS[v${i}]`;
+  const tail = `setsar=1,${color ? `${color},` : ''}fps=${fps},format=yuv420p,tpad=stop_mode=clone:stop_duration=${n(1 / fps)},trim=duration=${n(dur)},setpts=PTS-STARTPTS${fades ? `,${fades}` : ''}[v${i}]`;
   if (fit === 'cover') {
     return [`${src}${pts},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},${tail}`];
   }
@@ -187,4 +212,4 @@ function buildConcatArgs(listFile, opts) {
 
 const INTERMEDIATE_CRF = 12;
 
-module.exports = { atempoChain, outDuration, frameAccurate, buildGraph, buildExportArgs, buildConcatArgs };
+module.exports = { atempoChain, outDuration, frameAccurate, colorFilter, buildGraph, buildExportArgs, buildConcatArgs };
