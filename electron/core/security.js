@@ -143,6 +143,7 @@ function validateClip(c, grants, i) {
     fadeIn: c.fadeIn == null ? 0 : num(c.fadeIn, 'fade de entrada', { min: 0, max: C.MAX_FADE }),
     fadeOut: c.fadeOut == null ? 0 : num(c.fadeOut, 'fade de saída', { min: 0, max: C.MAX_FADE }),
     denoise: !!c.denoise,
+    hdr: !!c.hdr,
     filter: c.filter == null ? 'natural' : oneOf(c.filter, Object.keys(C.FILTERS), 'filtro de cor'),
     videoFadeIn: c.videoFadeIn == null ? 0 : num(c.videoFadeIn, 'transição', { min: 0, max: C.MAX_VIDEO_FADE }),
     videoFadeOut: c.videoFadeOut == null ? 0 : num(c.videoFadeOut, 'transição', { min: 0, max: C.MAX_VIDEO_FADE }),

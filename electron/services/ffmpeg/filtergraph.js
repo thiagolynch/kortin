@@ -51,6 +51,16 @@ function colorFilter(name) {
   return f.contrast ? `${mix},eq=contrast=${f.contrast}` : mix;
 }
 
+/**
+ * Converte HDR (bt2020 + PQ/HLG, comum em vídeo de iPhone/Android) para SDR antes do resto da
+ * cadeia. Sem isso, a cor sai esmaecida: colorchannelmixer e o restante dos filtros abaixo
+ * assumem SDR/bt709, e o FFmpeg não faz essa conversão sozinho ao decodificar.
+ * zscale faz a leitura do espaço de cor de origem; tonemap=hable comprime o brilho alto sem
+ * cortar (em vez de só saturar o branco); o segundo zscale devolve bt709/8-bit para o resto do
+ * grafo (colorchannelmixer, fades etc.) funcionar normalmente.
+ */
+const HDR_TONEMAP = 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p';
+
 /** Fade da imagem (pelo preto) no começo/fim do clipe, dentro da duração do clipe. */
 function videoFades(c, dur) {
   const fi = Math.min(c.videoFadeIn || 0, dur / 2);
@@ -68,8 +78,9 @@ function videoChain(i, c, { W, H, fps, fit }) {
   const pts = speed === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${speed.toFixed(5)}`;
   const color = colorFilter(c.filter);
   const fades = videoFades(c, dur);
+  const tonemap = c.hdr ? `${HDR_TONEMAP},` : '';
   // tpad garante pelo menos 1 quadro em clipes muito curtos (ex.: 0,1 s a 4x)
-  const tail = `setsar=1,${color ? `${color},` : ''}fps=${fps},format=yuv420p,tpad=stop_mode=clone:stop_duration=${n(1 / fps)},trim=duration=${n(dur)},setpts=PTS-STARTPTS${fades ? `,${fades}` : ''}[v${i}]`;
+  const tail = `setsar=1,${tonemap}${color ? `${color},` : ''}fps=${fps},format=yuv420p,tpad=stop_mode=clone:stop_duration=${n(1 / fps)},trim=duration=${n(dur)},setpts=PTS-STARTPTS${fades ? `,${fades}` : ''}[v${i}]`;
   if (fit === 'cover') {
     return [`${src}${pts},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},${tail}`];
   }
