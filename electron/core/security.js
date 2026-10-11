@@ -143,7 +143,31 @@ function validateClip(c, grants, i) {
     fadeIn: c.fadeIn == null ? 0 : num(c.fadeIn, 'fade de entrada', { min: 0, max: C.MAX_FADE }),
     fadeOut: c.fadeOut == null ? 0 : num(c.fadeOut, 'fade de saída', { min: 0, max: C.MAX_FADE }),
     denoise: !!c.denoise,
+    filter: c.filter == null ? 'natural' : oneOf(c.filter, Object.keys(C.FILTERS), 'filtro de cor'),
+    videoFadeIn: c.videoFadeIn == null ? 0 : num(c.videoFadeIn, 'transição', { min: 0, max: C.MAX_VIDEO_FADE }),
+    videoFadeOut: c.videoFadeOut == null ? 0 : num(c.videoFadeOut, 'transição', { min: 0, max: C.MAX_VIDEO_FADE }),
   };
+}
+
+/**
+ * Títulos de texto. As linhas já vêm quebradas pela interface (a prévia mostra exatamente essas
+ * linhas). Texto vai para o .ass escapado (sem tags), números com limites.
+ */
+function validateTitles(titles) {
+  if (titles == null) return [];
+  if (!Array.isArray(titles) || titles.length > C.LIMITS.maxTitles) fail('Títulos inválidos.');
+  return titles.map((t) => {
+    if (!t || typeof t !== 'object' || !Array.isArray(t.lines)) fail('Título inválido.');
+    const start = num(t.start, 'início do título', { min: 0, max: C.LIMITS.maxDurationSeconds });
+    const end = num(t.end, 'fim do título', { min: 0, max: C.LIMITS.maxDurationSeconds });
+    if (end <= start) fail('Título com duração inválida.');
+    const lines = t.lines.slice(0, C.LIMITS.maxTitleLines).map((l) => String(l ?? '').slice(0, C.LIMITS.maxTitleChars));
+    return {
+      start, end, lines,
+      style: oneOf(t.style ?? 'titulo', C.TITLE_STYLES, 'estilo do título'),
+      position: num(t.position ?? 0.5, 'altura do título', { min: 0, max: 1 }),
+    };
+  });
 }
 
 function validateCaptions(captions) {
@@ -215,6 +239,7 @@ function validateExportJob(job, grants) {
       preset: oneOf(o.preset ?? 'veryfast', C.X264_PRESETS, 'velocidade de compressão'),
       encoder: oneOf(o.encoder ?? 'libx264', C.ENCODERS, 'codificador'),
       captions: validateCaptions(o.captions),
+      titles: validateTitles(o.titles),
       music,
     },
   };
@@ -232,6 +257,7 @@ module.exports = {
   assertAudioPath,
   assertMediaPath,
   validateMusic,
+  validateTitles,
   validateExportJob,
   validateCaptions,
   num,

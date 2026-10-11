@@ -3,6 +3,7 @@
 // sem serializar o projeto inteiro a cada mudança.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { emptyDocument } from '../state/document';
+import { sanitizeTitles } from '../lib/titles';
 import { DEFAULT_CAPTIONS } from '../lib/captions';
 import {
   ASPECTS, FITS, MUSIC_DEFAULTS, baseName, cleanError, durationMismatches, musicFields, remapProjectPaths, restoreClips,
@@ -26,11 +27,13 @@ export function useProject({ docApi, library, player, notify, onLoaded, askRelin
   // Recuperação automática: grava 1,5 s depois da última mudança
   const pathRef = useRef(projectPath);
   pathRef.current = projectPath;
+  // Grava mesmo com uma edição em andamento (ex.: digitando um título): o atraso de 1,5 s já evita
+  // gravar no meio de um arrasto, e bloquear durante a edição deixava a recuperação desatualizada.
   useEffect(() => {
-    if (!dirty || !doc.clips.length || docApi.inTransaction) return undefined;
+    if (!dirty || !doc.clips.length) return undefined;
     const t = setTimeout(() => window.kortin.autosaveWrite({ ...serializeProject(doc), _path: pathRef.current }), AUTOSAVE_DELAY);
     return () => clearTimeout(t);
-  }, [doc, dirty, docApi.inTransaction]);
+  }, [doc, dirty]);
 
   const confirmDiscard = useCallback(
     () => !dirty || window.confirm('Você tem alterações não salvas neste projeto. Deseja descartá-las?'),
@@ -77,6 +80,7 @@ export function useProject({ docApi, library, player, notify, onLoaded, askRelin
       captions: { ...DEFAULT_CAPTIONS, ...(data.captions || {}) },
       transcripts: data.transcripts && typeof data.transcripts === 'object' ? data.transcripts : {},
       music,
+      titles: sanitizeTitles(data.titles),
     };
     library.replaceMedia(ok);
     ops.reset(next);

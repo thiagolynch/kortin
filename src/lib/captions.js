@@ -11,6 +11,14 @@ export const CAPTION_STYLES = {
 
 export const CAPTION_SIZES = { p: 0.8, m: 1, g: 1.25 };
 
+/**
+ * Fator entre o tamanho de fonte do .ass (libass) e o font-size do CSS para a Montserrat.
+ * A libass faz o tamanho caber em usWinAscent + usWinDescent (1109 + 453 = 1562 unidades por 1000),
+ * o CSS usa o "em" (1000). Medido: "H" com Fontsize 400 sai com 179 px de altura = 0,7 em de 255,7 px.
+ * Sem este fator, a prévia mostrava o texto ~56% maior do que o vídeo exportado.
+ */
+export const ASS_FONT_EM = 1.562;
+
 /** Quantos caracteres cabem numa legenda, por formato (vertical = frases curtas, estilo Reels) */
 export const MAX_CHARS = { '9:16': 22, '4:5': 26, '1:1': 28, '16:9': 42 };
 

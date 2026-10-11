@@ -1,16 +1,37 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { ASPECTS, locate } from '../lib/timeline';
+import { ASPECTS, locate, videoFadeBlack } from '../lib/timeline';
+import { filterCss } from './ColorFilters';
 import { useDerivedPlayhead } from '../state/playhead';
 import CaptionOverlay from './CaptionOverlay';
 
 /** Fundo desfocado do clipe atual: só troca quando o clipe muda */
-function BlurBackdrop({ store, segments }) {
-  const index = useDerivedPlayhead(store, (t) => locate(segments, t)?.index ?? -1, [segments]);
-  const thumb = segments[index]?.clip.thumb;
-  return thumb ? <img className="frame-blur" src={thumb} alt="" draggable={false} /> : null;
+function BlurBackdrop({ clip }) {
+  const thumb = clip?.thumb;
+  return thumb ? <img className="frame-blur" src={thumb} alt="" draggable={false} style={{ filter: filterCss(clip.filter) }} /> : null;
 }
 
-function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject, cues, captionSettings }) {
+/**
+ * Camada preta das transições. Muda a cada quadro, então escreve direto no estilo do elemento
+ * (sem re-renderizar o React).
+ */
+function FadeLayer({ store, segments }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const update = () => {
+      const loc = locate(segments, store.get().time);
+      const o = loc ? videoFadeBlack(loc.seg.clip, store.get().time - loc.seg.start) : 0;
+      if (ref.current) ref.current.style.opacity = String(o);
+    };
+    update();
+    return store.subscribe(update);
+  }, [store, segments]);
+  return <div ref={ref} className="frame-fade" aria-hidden="true" />;
+}
+
+function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject, cues, captionSettings, children }) {
+  // clipe atual: só muda quando o cursor passa de um clipe para outro
+  const index = useDerivedPlayhead(player.store, (t) => locate(segments, t)?.index ?? -1, [segments]);
+  const current = segments[index]?.clip;
   const wrapRef = useRef(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const a = ASPECTS[aspect];
@@ -37,16 +58,19 @@ function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject
   return (
     <div className="preview" ref={wrapRef}>
       <div className="frame" style={{ width: box.w, height: box.h }}>
-        {fit === 'blur' && <BlurBackdrop store={player.store} segments={segments} />}
+        {fit === 'blur' && <BlurBackdrop clip={current} />}
         <video
           ref={player.videoRef}
           onLoadedMetadata={player.onLoadedMetadata}
           className={`frame-video fit-${fit}`}
+          style={{ filter: filterCss(current?.filter) }}
           playsInline
           preload="auto"
           crossOrigin="anonymous"
         />
+        <FadeLayer store={player.store} segments={segments} />
         <CaptionOverlay cues={cues} store={player.store} settings={captionSettings} width={box.w} height={box.h} />
+        {children?.(box)}
         {empty && (
           <div className="frame-empty">
             <button className="frame-empty-main" onClick={onImport}>

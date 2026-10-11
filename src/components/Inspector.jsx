@@ -1,6 +1,7 @@
 import {
-  MAX_FADE, MAX_VOLUME, MIN_CLIP, SPEEDS, clipLength, formatSpeed, formatTime, sourceTime,
+  FILTERS, FILTER_LABELS, MAX_FADE, MAX_VIDEO_FADE, MAX_VOLUME, MIN_CLIP, SPEEDS, clipLength, formatSpeed, formatTime, sourceTime,
 } from '../lib/timeline';
+import { filterCss } from './ColorFilters';
 import { Icon } from './Icons';
 import { useDerivedPlayhead } from '../state/playhead';
 
@@ -71,7 +72,7 @@ export default function Inspector(props) {
   return <ClipInspector {...props} />;
 }
 
-function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDelete, onReset }) {
+function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDelete, onReset, onFilterAll, onSmoothJoins }) {
   const flags = useDerivedPlayhead(store, (t) => cursorFlags(clip, segment, t), [clip, segment]);
   const inside = !!(flags & 1);
   const canIn = !!(flags & 2);
@@ -111,6 +112,28 @@ function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDel
                 onClick={() => sp !== speed && edit.commit({ speed: sp })}
               >
                 {formatSpeed(sp)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="insp-section">
+          <div className="insp-row-head">
+            <label className="insp-section-label">Cor</label>
+            {(clip.filter || 'natural') !== 'natural' && (
+              <button className="link-btn small" onClick={() => onFilterAll(clip.filter)} title="Usa esta cor em todos os clipes">aplicar a todos</button>
+            )}
+          </div>
+          <div className="filter-chips">
+            {Object.keys(FILTERS).map((f) => (
+              <button
+                key={f}
+                className={(clip.filter || 'natural') === f ? 'active' : ''}
+                onClick={() => (clip.filter || 'natural') !== f && edit.commit({ filter: f })}
+                title={FILTER_LABELS[f]}
+              >
+                <span className="filter-swatch" style={{ backgroundImage: clip.thumb ? `url(${clip.thumb})` : undefined, filter: filterCss(f) }} />
+                <small>{FILTER_LABELS[f]}</small>
               </button>
             ))}
           </div>
@@ -157,6 +180,33 @@ function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDel
           />
         </div>
 
+        <div className="insp-section">
+          <div className="insp-row-head">
+            <label className="insp-section-label">Transição da imagem</label>
+            <button className="link-btn small" onClick={onSmoothJoins} title="Fade pelo preto de 0,25 s em todas as emendas">suavizar todas as emendas</button>
+          </div>
+          <div className="insp-fades">
+            <Slider
+              label="Surge do preto"
+              value={Math.min(clip.videoFadeIn || 0, MAX_VIDEO_FADE)}
+              display={`${(clip.videoFadeIn || 0).toFixed(1).replace('.', ',')} s`}
+              min={0} max={Math.min(MAX_VIDEO_FADE, maxFade)} step={0.05}
+              disabled={maxFade <= 0}
+              onChange={(v) => edit.preview({ videoFadeIn: v })}
+              onEnd={edit.end}
+            />
+            <Slider
+              label="Some no preto"
+              value={Math.min(clip.videoFadeOut || 0, MAX_VIDEO_FADE)}
+              display={`${(clip.videoFadeOut || 0).toFixed(1).replace('.', ',')} s`}
+              min={0} max={Math.min(MAX_VIDEO_FADE, maxFade)} step={0.05}
+              disabled={maxFade <= 0}
+              onChange={(v) => edit.preview({ videoFadeOut: v })}
+              onEnd={edit.end}
+            />
+          </div>
+        </div>
+
         <label className={`switch insp-switch${clip.hasAudio ? '' : ' disabled'}`} title="Remove chiado e barulho constante de fundo. Aplicado na exportação.">
           <input
             type="checkbox"
@@ -179,8 +229,8 @@ function ClipInspector({ clip, segment, store, edit, onSplit, onDuplicate, onDel
           <button
             className="btn"
             onClick={onReset}
-            disabled={clip.inPoint === 0 && clip.outPoint === clip.duration && speed === 1 && !clip.fadeIn && !clip.fadeOut && (clip.volume ?? 1) === 1 && !clip.denoise}
-            title="Volta o clipe ao original: sem cortes, velocidade 1x, volume 100%"
+            disabled={clip.inPoint === 0 && clip.outPoint === clip.duration && speed === 1 && !clip.fadeIn && !clip.fadeOut && (clip.volume ?? 1) === 1 && !clip.denoise && (clip.filter || 'natural') === 'natural' && !clip.videoFadeIn && !clip.videoFadeOut}
+            title="Volta o clipe ao original: sem cortes, velocidade 1x, volume 100%, cor natural, sem transição"
           >
             Restaurar
           </button>

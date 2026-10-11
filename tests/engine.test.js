@@ -241,6 +241,39 @@ function check(cond, msg) {
     `Projeto completo: ${projRes.parts} partes, ${projInfo?.duration.toFixed(2)}s (esperado ${expectedProj.toFixed(2)}s), música ${musicLevel} dB, legenda mudou ${changed} de ${withCap.length} pontos da faixa`
   );
 
+  // v0.7: cor, transição e título, medidos no vídeo exportado
+  const v7clips = [
+    { path: horizontal, inPoint: 0, outPoint: 2, hasAudio: true, volume: 1, speed: 1, filter: 'pb', videoFadeOut: 0.5 },
+    { path: horizontal, inPoint: 2, outPoint: 4, hasAudio: true, volume: 1, speed: 1, filter: 'quente', videoFadeIn: 0.5 },
+  ];
+  const v7opts = { width: 1080, height: 1080, fit: 'contain', crf: 28, preset: 'ultrafast' };
+  const v7Out = path.join(tmp, 'v07-titulo.mp4');
+  const v7Plain = path.join(tmp, 'v07-sem-titulo.mp4');
+  const v7res = await engine.exportVideo(v7clips, { ...v7opts, output: v7Out, titles: [{ start: 0.2, end: 1.6, lines: ['Meu título'], style: 'titulo', position: 0.5 }] }).promise;
+  await engine.exportVideo(v7clips, { ...v7opts, output: v7Plain }).promise;
+  const rgbAt = (file, t) => spawnSync(engine.FFMPEG, ['-hide_banner', '-loglevel', 'error', '-ss', String(t), '-i', file, '-frames:v', '1', '-vf', 'scale=48:48,format=rgb24', '-f', 'rawvideo', '-']).stdout || Buffer.alloc(0);
+  const v7stats = (b) => {
+    let sat = 0; let lum = 0; let rb = 0;
+    for (let i = 0; i < b.length; i += 3) {
+      sat += Math.max(b[i], b[i + 1], b[i + 2]) - Math.min(b[i], b[i + 1], b[i + 2]);
+      lum += (b[i] + b[i + 1] + b[i + 2]) / 3;
+      rb += b[i] - b[i + 2];
+    }
+    const n = b.length / 3 || 1;
+    return { sat: sat / n, lum: lum / n, warm: rb / n };
+  };
+  const pb = v7stats(rgbAt(v7Plain, 1.0));
+  const nearEnd = v7stats(rgbAt(v7Plain, 1.97));
+  const warm = v7stats(rgbAt(v7Plain, 3.0));
+  const neutral = v7stats(rgbAt(horizontal, 3.0)); // mesmo quadro, sem filtro
+  check(v7res.ok && pb.sat < 3, `Filtro P&B: saturação média ${pb.sat.toFixed(1)} (esperado ≈ 0)`);
+  check(warm.warm > neutral.warm + 5, `Filtro quente: vermelho−azul ${warm.warm.toFixed(1)} vs ${neutral.warm.toFixed(1)} sem filtro`);
+  check(nearEnd.lum < 15 && pb.lum > 40, `Transição: brilho ${nearEnd.lum.toFixed(1)} no fim do clipe vs ${pb.lum.toFixed(1)} no meio`);
+  const v7a = rgbAt(v7Out, 1.0);
+  const v7b = rgbAt(v7Plain, 1.0);
+  const v7diff = [...v7a].filter((v, i) => Math.abs(v - v7b[i]) > 40).length;
+  check(v7diff > 30, `Título gravado no vídeo: ${v7diff} pontos diferentes do vídeo sem título`);
+
   if (failures) {
     console.error(`\n${failures} teste(s) falharam.`);
     process.exit(1);

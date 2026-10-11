@@ -36,7 +36,7 @@ button { font: inherit; color: inherit; }
 .app {
   height: 100%;
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr) 262px;
+  grid-template-rows: 52px minmax(0, 1fr) 290px;
 }
 
 /* ---------- Topo ---------- */
@@ -526,3 +526,29 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .support-box strong { font-size: 13px; }
 .support-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
 .support-diag { margin: 6px 0 0; font-size: 11px; white-space: pre-wrap; color: var(--muted); max-height: 120px; overflow: auto; }
+
+/* ---------- v0.7: cor, transições e títulos ---------- */
+.insp-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.filter-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.filter-chips button { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--muted); cursor: pointer; }
+.filter-chips button.active { border-color: var(--accent); color: var(--text); }
+.filter-swatch { width: 100%; aspect-ratio: 16 / 9; border-radius: 5px; background: #333 center / cover; }
+.frame-fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 2; }
+.frame { isolation: isolate; }
+.cap-overlay { z-index: 3; }
+.frame-empty { z-index: 4; }
+.title-overlay { position: absolute; left: 6%; right: 6%; transform: translateY(-50%); z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center; line-height: 1.562; /* = altura de linha da libass */ font-family: 'Montserrat', sans-serif; cursor: pointer; animation: title-in .2s ease-out; }
+.title-overlay span { display: inline-block; padding: 0 var(--pad); white-space: nowrap; } /* as linhas já vêm quebradas: iguais à exportação */
+.title-overlay.selected { outline: 1px dashed #ffffff88; outline-offset: 4px; border-radius: 4px; }
+.title-titulo { color: #fff; font-weight: 800; text-shadow: 0 0 .06em #000, 0 0 .06em #000, .03em .04em 0 #0008; }
+.title-destaque span { color: #111; background: #ffe14d; font-weight: 800; padding: calc(var(--pad) * .55) var(--pad); }
+.title-rodape span { color: #fff; background: #0b0d12bf; font-weight: 700; padding: calc(var(--pad) * .55) var(--pad); }
+.title-overlay.title-destaque, .title-overlay.title-rodape { gap: 0; }
+@keyframes title-in { from { opacity: 0; } to { opacity: 1; } }
+.title-editor { display: flex; flex-direction: column; gap: 10px; }
+.title-text { width: 100%; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px; font: inherit; }
+.title-times { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tl-titles { position: absolute; left: 0; right: 0; top: 208px; height: 22px; }
+.tl-title { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: #f59e0b33; border: 1px solid #fbbf2477; color: #fde68a; font-size: 11px; padding: 0 6px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; cursor: grab; }
+.tl-title.selected { background: #f59e0b66; border-color: #fde68a; }
+.tl-title:active { cursor: grabbing; }

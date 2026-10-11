@@ -30,6 +30,9 @@ function validateShape(data) {
   if (data.music != null && (typeof data.music !== 'object' || typeof data.music.path !== 'string')) {
     fail('O projeto está corrompido (música).');
   }
+  if (data.titles != null && (!Array.isArray(data.titles) || data.titles.length > C.LIMITS.maxTitles)) {
+    fail('O projeto está corrompido (títulos).');
+  }
   return data;
 }
 

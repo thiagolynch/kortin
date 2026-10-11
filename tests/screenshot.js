@@ -176,6 +176,36 @@ app.whenReady().then(async () => {
       };
     `);
     console.log('música:', JSON.stringify(mus));
+
+    // v0.7: cor, transições e título
+    const v07 = await js(`
+      [...document.querySelectorAll('.tl-clip')][0].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: document.querySelectorAll('.tl-clip')[0].getBoundingClientRect().left + 5 }));
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      await wait(200);
+      [...document.querySelectorAll('.filter-chips button')].find(b => b.textContent.includes('Quente')).click();
+      await wait(200);
+      const videoFilter = document.querySelector('.frame-video').style.filter;
+      [...document.querySelectorAll('.inspector .link-btn')].find(b => b.textContent.includes('suavizar')).click();
+      await wait(200);
+      [...document.querySelectorAll('.panel-tabs button')].find(b => b.textContent.includes('Textos')).click();
+      await wait(150);
+      [...document.querySelectorAll('.cap-card .btn')].find(b => b.textContent.includes('Adicionar')).click();
+      await wait(300);
+      const ta = document.querySelector('.title-text');
+      ta.focus();
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, 'Bastidores do\\nprojeto'); ta.dispatchEvent(new Event('input', { bubbles: true })); ta.blur();
+      await wait(300);
+      return {
+        videoFilter,
+        swatches: document.querySelectorAll('.filter-chips button').length,
+        titleOverlay: [...document.querySelectorAll('.title-overlay span')].map(x => x.textContent),
+        titleLane: document.querySelectorAll('.tl-title').length,
+      };
+    `);
+    console.log('v0.7:', JSON.stringify(v07));
+    await shot(win, 'kortin-titulos');
+    await js(`[...document.querySelectorAll('.panel-tabs button')].find(b => b.textContent.includes('Mídia')).click(); await wait(100);`);
     await shot(win, 'kortin-editor-v02');
 
     // Exportar dois formatos de uma vez, em segundo plano
@@ -286,6 +316,8 @@ app.whenReady().then(async () => {
         clips: document.querySelectorAll('.tl-clip').length,
         speedBadge: document.querySelector('.tl-speed')?.textContent,
         toast: document.querySelector('.toast')?.innerText,
+        titles: document.querySelectorAll('.tl-title').length,
+        music: document.querySelector('.tl-music-bar')?.textContent || null,
       };
     `);
     console.log('após recuperar:', JSON.stringify(after));

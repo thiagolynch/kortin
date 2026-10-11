@@ -39,6 +39,14 @@ Legenda automática e cortes com IA processados **no seu computador** — seus v
 - **Desfazer/refazer de tudo** — cada arrasto vira um único passo
 - Formatos **9:16, 16:9, 1:1 e 4:5** com fundo desfocado, preencher ou ajustar
 
+### 🎨 Cor, transições e títulos
+<img src="docs/img/titulos-e-cor.webp" alt="Título sobre o vídeo, filtros de cor e transição suave" width="760" />
+
+- **6 cores prontas** por clipe — Natural, Quente, Frio, Vívido, Vintage e P&B — com "aplicar a todos"
+- **Transição suave** (fade pelo preto) em cada clipe ou em **todas as emendas com um clique**, sem mudar a duração nem dessincronizar a legenda
+- **Títulos** em 3 estilos (Título, Destaque, Rodapé): texto livre por cima do vídeo, arrastável na linha do tempo, com entrada e saída suaves
+- **O que você vê é o que sai**: a prévia usa as mesmas matrizes de cor e o mesmo tamanho de fonte do vídeo exportado
+
 ### 💬 Legenda automática (IA no seu PC)
 <img src="docs/img/legendas-e-cortes.webp" alt="Legendas com destaque palavra a palavra e revisão de cortes sugeridos" width="760" />
 
@@ -111,7 +119,8 @@ Legenda automática e cortes com IA processados **no seu computador** — seus v
 | 0.5 | Projetos portáteis, cache, modelos verificados, licenças | ✅ |
 | **0.6** | **Cortes sugeridos e música de fundo com abaixamento** | ✅ |
 | 0.6.1 | Preparação do beta: diagnóstico do PC e link direto de download | ✅ |
-| próximas | Beta fechado · textos e títulos · transições · brand kit e templates · lote para agências | 🔜 |
+| **0.7** | **Cores, transições e títulos** | ✅ |
+| próximas | Beta fechado · fotos com zoom suave · licença e compra · marca própria (logo) e templates | 🔜 |
 
 Histórico completo no [CHANGELOG](CHANGELOG.md).
 
@@ -130,8 +139,8 @@ npm run dev            # abre o Kortin em modo desenvolvimento
 | Comando | O que faz |
 |---|---|
 | `npm test` | testes de unidade/propriedade + motor de vídeo |
-| `npm run test:unit` | 73 testes (timeline, legendas, cortes, música, segurança com fuzz, FFmpeg) |
-| `npm run test:engine` | exporta vídeos reais e mede o resultado (formatos, áudio, legendas, música, 160 clipes) |
+| `npm run test:unit` | 88 testes (timeline, legendas, cortes, música, cor, títulos, segurança com fuzz, FFmpeg) |
+| `npm run test:engine` | exporta vídeos reais e mede o resultado (formatos, áudio, legendas, música, cor, transição, títulos, 160 clipes) |
 | `npm run test:whisper` | legenda de ponta a ponta com o modelo tiny |
 | `npm run verify:models` | confere os SHA-256 dos modelos contra o servidor |
 | `npx electron tests/screenshot.js editar\|legenda\|recuperar\|mover <pasta>` | roteiros na interface, com prints |

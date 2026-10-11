@@ -17,6 +17,14 @@ const PRESETS = {
 
 const SIZES = { p: 0.8, m: 1, g: 1.25 };
 
+// Títulos (camada de texto livre). Mesmos nomes e cores da prévia (TitleOverlay).
+const TITLE_PRESETS = {
+  titulo: { font: 'Montserrat ExtraBold', bold: false, size: 0.085, primary: 'FFFFFF', outline: '000000', bord: 0.06, shadow: 3 },
+  destaque: { font: 'Montserrat ExtraBold', bold: false, size: 0.055, primary: '111111', box: 'FFE14D', boxAlpha: 0x00, bord: 0.35 },
+  rodape: { font: 'Montserrat', bold: true, size: 0.036, primary: 'FFFFFF', box: '0B0D12', boxAlpha: 0x40, bord: 0.45 },
+};
+const TITLE_FADE_MS = 200;
+
 /** RRGGBB → &HAABBGGRR do ASS */
 function assColor(hex, alpha = 0) {
   const h = hex.replace('#', '');
@@ -40,7 +48,29 @@ const escapeText = (t) => String(t).replace(/\\/g, '/').replace(/[{}]/g, '').rep
 /**
  * cues: legendas na linha do tempo · settings: { style, position (0 a 1, centro vertical), size, uppercase }
  */
-function buildAss(cues, settings, W, H) {
+function titleStyleLine(name, t, W, H) {
+  const fontSize = Math.round(t.size * Math.sqrt(W * H));
+  const bord = Math.max(1, Math.round(fontSize * t.bord));
+  const outline = t.box ? assColor(t.box, t.boxAlpha) : assColor(t.outline || '000000');
+  const back = t.box ? assColor(t.box, t.boxAlpha) : assColor('000000', 0x60);
+  const margin = Math.round(W * 0.06);
+  return `Style: ${[name, t.font, fontSize, assColor(t.primary), assColor(t.primary), outline, back, t.bold ? -1 : 0, 0, 0, 0, 100, 100, 0, 0, t.box ? 3 : 1, bord, t.shadow || 0, 5, margin, margin, 0, 1].join(',')}`;
+}
+
+/** Eventos dos títulos: linhas já quebradas pela interface, com entrada e saída suaves. */
+function titleEvents(titles, W, H) {
+  return titles
+    .filter((t) => t.end > t.start && t.lines.some((l) => l.trim()))
+    .map((t) => {
+      const x = Math.round(W / 2);
+      const y = Math.round(H * Math.min(0.95, Math.max(0.05, t.position ?? 0.5)));
+      const text = t.lines.map(escapeText).join('\\N');
+      // camada 1: títulos ficam por cima da legenda
+      return `Dialogue: 1,${assTime(t.start)},${assTime(t.end)},T_${t.style},,0,0,0,,{\\an5\\pos(${x},${y})\\fad(${TITLE_FADE_MS},${TITLE_FADE_MS})}${text}`;
+    });
+}
+
+function buildAss(cues, settings, W, H, titles = []) {
   const p = PRESETS[settings.style] || PRESETS.classica;
   const fontSize = Math.round(p.size * Math.sqrt(W * H) * (SIZES[settings.size] || 1));
   const bord = Math.max(1, Math.round(fontSize * p.bord));
@@ -92,22 +122,24 @@ function buildAss(cues, settings, W, H) {
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     `Style: ${style}`,
+    ...Object.entries(TITLE_PRESETS).map(([name, t]) => titleStyleLine(`T_${name}`, t, W, H)),
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
     ...lines,
+    ...titleEvents(titles, W, H),
     '',
   ].join('\n');
 }
 
 /** Prepara uma pasta de trabalho com o .ass e as fontes (o FFmpeg roda com cwd nela, sem caminhos complicados). */
-function prepareCaptionDir(workDir, cues, settings, W, H) {
+function prepareCaptionDir(workDir, cues, settings, W, H, titles = []) {
   fs.mkdirSync(path.join(workDir, 'fonts'), { recursive: true });
   for (const f of fs.readdirSync(fontsDir)) {
     if (f.endsWith('.ttf')) fs.copyFileSync(path.join(fontsDir, f), path.join(workDir, 'fonts', f));
   }
-  fs.writeFileSync(path.join(workDir, 'legenda.ass'), buildAss(cues, settings, W, H), 'utf8');
+  fs.writeFileSync(path.join(workDir, 'legenda.ass'), buildAss(cues, settings, W, H, titles), 'utf8');
   return 'ass=legenda.ass:fontsdir=fonts';
 }
 
-module.exports = { PRESETS, buildAss, prepareCaptionDir, setFontsDir, getFontsDir, assTime };
+module.exports = { PRESETS, TITLE_PRESETS, buildAss, prepareCaptionDir, setFontsDir, getFontsDir, assTime };

@@ -14,13 +14,17 @@ import CaptionsPanel from './components/CaptionsPanel';
 import RecoveryBanner from './components/RecoveryBanner';
 import RelinkDialog from './components/RelinkDialog';
 import MusicCard from './components/MusicCard';
+import TitlesPanel from './components/TitlesPanel';
+import TitleOverlay from './components/TitleOverlay';
+import { ColorFilterDefs } from './components/ColorFilters';
+import { newTitle } from './lib/titles';
 import { PlayButton, Timecode } from './components/Transport';
 import { Icon, Logo } from './components/Icons';
 import { CUT_TYPES, FILLERS, MAX_CHARS, applyCuts, deriveCues, editCue, suggestCuts } from './lib/captions';
 import { usePlayer } from './lib/usePlayer';
 import { useMusic } from './hooks/useMusic';
 import {
-  ASPECTS, FITS, MUSIC_DEFAULTS, baseName, buildSegments, cleanError, mediaToClip, musicFields, splitAt, totalOf, uid,
+  ASPECTS, FITS, MUSIC_DEFAULTS, baseName, buildSegments, cleanError, mediaToClip, musicFields, smoothAllJoins, splitAt, totalOf, uid,
 } from './lib/timeline';
 import { patchClip, useDocument } from './state/document';
 import { useMediaLibrary } from './hooks/useMediaLibrary';
@@ -66,7 +70,7 @@ export default function App() {
 function Editor() {
   const docApi = useDocument();
   const { doc, ops } = docApi;
-  const { clips, aspect, fit, captions: captionSettings, transcripts, music } = doc;
+  const { clips, aspect, fit, captions: captionSettings, transcripts, music, titles } = doc;
   const docRef = useRef(doc);
   docRef.current = doc;
 
@@ -220,6 +224,7 @@ function Editor() {
     if (!selectedClip) return;
     clipEdit.commit({
       inPoint: 0, outPoint: selectedClip.duration, speed: 1, volume: 1, fadeIn: 0, fadeOut: 0, denoise: false,
+      filter: 'natural', videoFadeIn: 0, videoFadeOut: 0,
     });
   }, [clipEdit, selectedClip]);
 
@@ -318,6 +323,46 @@ function Editor() {
     },
     onEnd: ops.end,
   }), [ops, setMusicFromPath]);
+
+  // ---------- Cor e transições (todos os clipes) ----------
+  const onFilterAll = useCallback((f) => {
+    ops.commit((d) => ({ ...d, clips: d.clips.map((c) => (c.filter === f ? c : { ...c, filter: f })) }));
+    notify('Cor aplicada a todos os clipes. Ctrl+Z desfaz.');
+  }, [ops, notify]);
+  const onSmoothJoins = useCallback(() => {
+    ops.commit((d) => ({ ...d, clips: smoothAllJoins(d.clips) }));
+    notify('Transição suave em todas as emendas. Ctrl+Z desfaz.');
+  }, [ops, notify]);
+
+  // ---------- Títulos ----------
+  const [selectedTitleId, setSelectedTitleId] = useState(null);
+  const titlesApi = useMemo(() => {
+    const patchTitle = (id, patch) => (d) => ({ ...d, titles: d.titles.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
+    return {
+      patchTitle,
+      commit: (id, patch) => ops.commit(patchTitle(id, patch)),
+      preview: (id, patch) => { ops.begin(); ops.preview(patchTitle(id, patch)); },
+      end: ops.end,
+      remove: (id) => { ops.commit((d) => ({ ...d, titles: d.titles.filter((t) => t.id !== id) })); setSelectedTitleId(null); },
+    };
+  }, [ops]);
+  const addTitle = useCallback(() => {
+    const t = newTitle(player.getTime());
+    ops.commit((d) => ({ ...d, titles: [...(d.titles || []), t] }));
+    setSelectedTitleId(t.id);
+    setLeftTab('textos');
+  }, [ops, player]);
+  const selectTitle = useCallback((id, seek = false) => {
+    setSelectedTitleId(id);
+    setLeftTab('textos');
+    const t = docRef.current.titles.find((x) => x.id === id);
+    if (seek && t) { player.pause(); player.seek(t.start + 0.05); }
+  }, [player]);
+  const titleDrag = useMemo(() => ({
+    start: ops.begin,
+    move: (id, start) => ops.preview(titlesApi.patchTitle(id, { start })),
+    end: ops.end,
+  }), [ops, titlesApi]);
 
   const seekPaused = useCallback((t) => { player.pause(); player.seek(t); }, [player]);
 
@@ -421,6 +466,9 @@ function Editor() {
             <button role="tab" aria-selected={leftTab === 'media'} className={leftTab === 'media' ? 'active' : ''} onClick={() => setLeftTab('media')}>
               <Icon.Film width={14} height={14} /> Mídia
             </button>
+            <button role="tab" aria-selected={leftTab === 'textos'} className={leftTab === 'textos' ? 'active' : ''} onClick={() => setLeftTab('textos')}>
+              <Icon.Edit width={14} height={14} /> Textos{titles.length ? <span className="tab-badge">{titles.length}</span> : null}
+            </button>
             <button role="tab" aria-selected={leftTab === 'captions'} className={leftTab === 'captions' ? 'active' : ''} onClick={() => setLeftTab('captions')}>
               <Icon.Captions width={14} height={14} /> Legendas{cues.length ? <span className="tab-badge">{cues.length}</span> : null}
             </button>
@@ -430,6 +478,15 @@ function Editor() {
               <MediaBin media={library.media} busy={library.busy} onImport={openImport} onAdd={addFromBin} />
               <MusicCard music={music} total={total} busy={musicBusy} {...musicApi} />
             </div>
+          ) : leftTab === 'textos' ? (
+            <TitlesPanel
+              titles={titles}
+              selectedId={selectedTitleId}
+              onSelect={selectTitle}
+              onAdd={addTitle}
+              api={titlesApi}
+              getTime={player.getTime}
+            />
           ) : (
             <CaptionsPanel
               clips={clips}
@@ -456,7 +513,19 @@ function Editor() {
             onOpenProject={() => project.openProject()}
             cues={cues}
             captionSettings={captionSettings}
-          />
+          >
+            {(box) => (
+              <TitleOverlay
+                titles={titles}
+                aspect={aspect}
+                store={player.store}
+                width={box.w}
+                height={box.h}
+                selectedId={selectedTitleId}
+                onSelect={(id) => selectTitle(id)}
+              />
+            )}
+          </Preview>
         </div>
         <Inspector
           clip={selectedClip}
@@ -467,6 +536,8 @@ function Editor() {
           onDuplicate={duplicateSelected}
           onDelete={removeSelected}
           onReset={resetClip}
+          onFilterAll={onFilterAll}
+          onSmoothJoins={onSmoothJoins}
         />
       </main>
 
@@ -513,6 +584,10 @@ function Editor() {
           cues={captionSettings.enabled ? cues : []}
           cutMarks={leftTab === 'captions' ? suggestions : null}
           music={music}
+          titles={titles}
+          selectedTitleId={selectedTitleId}
+          onTitleSelect={selectTitle}
+          titleDrag={titleDrag}
           isCutOn={isCutOn}
           cutFocus={cutFocus}
           onCutClick={review.onFocus}
@@ -523,6 +598,7 @@ function Editor() {
         />
       </section>
 
+      <ColorFilterDefs />
       {dragOver && <div className="drop-overlay"><div>Solte para importar</div></div>}
       {toast && <div className="toast" role="status">{toast}</div>}
       {exporting && (
@@ -536,6 +612,7 @@ function Editor() {
           transcripts={transcripts}
           captionSettings={captionSettings}
           music={musicFields(music)}
+          titles={titles}
           onQueue={exportQueue.enqueue}
           onClose={() => setExporting(false)}
         />

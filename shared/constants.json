@@ -2,32 +2,196 @@
   "APP_ID": "kortin",
   "PROJECT_EXT": "kortin",
   "PROJECT_VERSION": 4,
-  "VIDEO_EXT": ["mp4", "mov", "m4v", "mkv", "webm", "avi", "wmv", "mts", "m2ts", "3gp"],
-  "AUDIO_EXT": ["mp3", "wav", "m4a", "aac", "ogg", "oga", "opus", "flac", "wma"],
-  "MUSIC": { "maxFade": 10, "defaultVolume": 0.25 },
+  "VIDEO_EXT": [
+    "mp4",
+    "mov",
+    "m4v",
+    "mkv",
+    "webm",
+    "avi",
+    "wmv",
+    "mts",
+    "m2ts",
+    "3gp"
+  ],
+  "AUDIO_EXT": [
+    "mp3",
+    "wav",
+    "m4a",
+    "aac",
+    "ogg",
+    "oga",
+    "opus",
+    "flac",
+    "wma"
+  ],
+  "MUSIC": {
+    "maxFade": 10,
+    "defaultVolume": 0.25
+  },
   "MIN_CLIP": 0.1,
   "MAX_VOLUME": 2,
   "MAX_FADE": 3,
-  "SPEEDS": [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4],
+  "SPEEDS": [
+    0.25,
+    0.5,
+    0.75,
+    1,
+    1.25,
+    1.5,
+    2,
+    3,
+    4
+  ],
   "ASPECTS": {
-    "9:16": { "width": 1080, "height": 1920 },
-    "16:9": { "width": 1920, "height": 1080 },
-    "1:1": { "width": 1080, "height": 1080 },
-    "4:5": { "width": 1080, "height": 1350 }
+    "9:16": {
+      "width": 1080,
+      "height": 1920
+    },
+    "16:9": {
+      "width": 1920,
+      "height": 1080
+    },
+    "1:1": {
+      "width": 1080,
+      "height": 1080
+    },
+    "4:5": {
+      "width": 1080,
+      "height": 1350
+    }
   },
-  "FITS": ["blur", "cover", "contain"],
-  "FPS": [24, 25, 30, 50, 60],
-  "ENCODERS": ["libx264", "h264_nvenc", "h264_qsv", "h264_amf"],
-  "X264_PRESETS": ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"],
-  "CAPTION_STYLES": ["classica", "destaque", "caixa", "neon"],
-  "CAPTION_SIZES": { "p": 0.8, "m": 1, "g": 1.25 },
-  "LANGUAGES": ["pt", "en", "es"],
+  "FITS": [
+    "blur",
+    "cover",
+    "contain"
+  ],
+  "FPS": [
+    24,
+    25,
+    30,
+    50,
+    60
+  ],
+  "ENCODERS": [
+    "libx264",
+    "h264_nvenc",
+    "h264_qsv",
+    "h264_amf"
+  ],
+  "X264_PRESETS": [
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow"
+  ],
+  "CAPTION_STYLES": [
+    "classica",
+    "destaque",
+    "caixa",
+    "neon"
+  ],
+  "CAPTION_SIZES": {
+    "p": 0.8,
+    "m": 1,
+    "g": 1.25
+  },
+  "LANGUAGES": [
+    "pt",
+    "en",
+    "es"
+  ],
   "LIMITS": {
     "maxClips": 2000,
     "maxCues": 20000,
     "maxWordsPerCue": 60,
     "maxWordChars": 80,
     "maxProjectBytes": 52428800,
-    "maxDurationSeconds": 21600
-  }
+    "maxDurationSeconds": 21600,
+    "maxTitles": 200,
+    "maxTitleLines": 6,
+    "maxTitleChars": 80
+  },
+  "FILTERS": {
+    "natural": null,
+    "quente": {
+      "matrix": [
+        1.08,
+        0.04,
+        0,
+        0.02,
+        1.0,
+        0,
+        0,
+        0.02,
+        0.86
+      ]
+    },
+    "frio": {
+      "matrix": [
+        0.9,
+        0,
+        0.02,
+        0,
+        1.0,
+        0.03,
+        0.02,
+        0.04,
+        1.1
+      ]
+    },
+    "vivido": {
+      "matrix": [
+        1.2756,
+        -0.2503,
+        -0.0253,
+        -0.0744,
+        1.0997,
+        -0.0253,
+        -0.0744,
+        -0.2503,
+        1.3247
+      ],
+      "contrast": 1.05
+    },
+    "vintage": {
+      "matrix": [
+        0.636,
+        0.461,
+        0.113,
+        0.209,
+        0.812,
+        0.101,
+        0.163,
+        0.32,
+        0.479
+      ],
+      "contrast": 0.9
+    },
+    "pb": {
+      "matrix": [
+        0.2126,
+        0.7152,
+        0.0722,
+        0.2126,
+        0.7152,
+        0.0722,
+        0.2126,
+        0.7152,
+        0.0722
+      ],
+      "contrast": 1.08
+    }
+  },
+  "MAX_VIDEO_FADE": 2,
+  "TITLE_STYLES": [
+    "titulo",
+    "destaque",
+    "rodape"
+  ]
 }
