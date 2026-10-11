@@ -3,6 +3,16 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.6.1] — 2026-10-11
+
+Preparação para o beta fechado.
+
+- **Copiar informações do PC** (tela de ajuda, ícone `?`): versão, Windows 10/11, processador, memória, placa de vídeo, aceleração e modelos de legenda — tudo de uma vez, para colar no relato de um problema. Não inclui nomes de arquivos.
+- **Abrir pasta de registros**, para quem quiser mandar o log junto.
+- **Link direto de download** no README (`Kortin-Instalador.exe` e `Kortin-Portatil.exe` sempre da versão mais recente).
+- Texto do README mais preciso: o processamento é local, mas o primeiro uso da legenda precisa de internet para baixar o modelo de IA (uma vez).
+- Novo teste do motor com um projeto completo: 24 clipes em partes, música com abaixamento e legenda queimada.
+
 ## [0.6.0] — 2026-10-11
 
 ### Cortes sugeridos (Módulo 3) — o Kortin sugere, você decide

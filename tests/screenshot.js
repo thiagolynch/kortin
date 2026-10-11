@@ -98,6 +98,11 @@ app.whenReady().then(async () => {
 
   if (mode === 'editar') {
     console.log('boas-vindas visível:', await js(`return !!document.querySelector('.welcome');`));
+    await click('.support-box .btn', 'Copiar');
+    await wait(1500);
+    const diag = await js(`return document.querySelector('.support-diag')?.textContent;`);
+    console.log('diagnóstico:', JSON.stringify(diag));
+    // (ler a área de transferência de volta trava no Xvfb; no Windows a cópia é síncrona)
     await shot(win, 'kortin-boas-vindas');
     await click('.welcome button', 'Explorar primeiro');
     await wait(2500); // importação + leitura da onda sonora

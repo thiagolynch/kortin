@@ -60,4 +60,6 @@ contextBridge.exposeInMainWorld('kortin', {
   onUpdateReady: listen('update:ready'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   openLicenses: () => ipcRenderer.invoke('app:openLicenses'),
+  copyDiagnostics: () => ipcRenderer.invoke('app:copyDiagnostics'),
+  openLogs: () => ipcRenderer.invoke('app:openLogs'),
 });
