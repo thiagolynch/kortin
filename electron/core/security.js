@@ -150,6 +150,8 @@ function validateClip(c, grants, i) {
     filter: c.filter == null ? 'natural' : oneOf(c.filter, Object.keys(C.FILTERS), 'filtro de cor'),
     videoFadeIn: c.videoFadeIn == null ? 0 : num(c.videoFadeIn, 'transição', { min: 0, max: C.MAX_VIDEO_FADE }),
     videoFadeOut: c.videoFadeOut == null ? 0 : num(c.videoFadeOut, 'transição', { min: 0, max: C.MAX_VIDEO_FADE }),
+    zoom: c.zoom == null ? 'none' : oneOf(c.zoom, C.ZOOM_STYLES, 'zoom'),
+    vignette: !!c.vignette,
   };
 }
 

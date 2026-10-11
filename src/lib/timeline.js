@@ -151,6 +151,8 @@ export function mediaToClip(m) {
     filter: 'natural',
     videoFadeIn: 0,
     videoFadeOut: 0,
+    zoom: 'none',
+    vignette: false,
   };
 }
 
@@ -159,6 +161,15 @@ export function mediaToClip(m) {
 export const FILTERS = C.FILTERS;
 export const MAX_VIDEO_FADE = C.MAX_VIDEO_FADE;
 export const FILTER_LABELS = { natural: 'Natural', quente: 'Quente', frio: 'Frio', vivido: 'Vívido', vintage: 'Vintage', pb: 'P&B' };
+export const ZOOM_MAX = C.ZOOM_MAX;
+export const ZOOM_LABELS = { none: 'Sem zoom', in: 'Aproximar', out: 'Afastar' };
+
+/** Progresso (0–1) do efeito de zoom no instante `tl` dentro do clipe; fator de escala já pronto pra prévia (CSS). */
+export function zoomScale(clip, tl, len) {
+  if (clip?.zoom !== 'in' && clip?.zoom !== 'out') return 1;
+  const progress = clamp(len > 0 ? tl / len : 0, 0, 1);
+  return clip.zoom === 'in' ? 1 + (ZOOM_MAX - 1) * progress : ZOOM_MAX - (ZOOM_MAX - 1) * progress;
+}
 
 /** Opacidade da camada preta da transição no instante `tl` dentro do clipe (0 = imagem normal). */
 export function videoFadeBlack(clip, tl) {
