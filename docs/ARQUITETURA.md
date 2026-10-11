@@ -17,6 +17,7 @@
 │ core/        security (Grants, validadores), logger             │
 │ services/    ffmpeg/ (probe, waveform, filtergraph, exporter),  │
 │              stt/ (whisper), captions/ (ASS), projectStore,     │
+│              highlights/ (melhores momentos, só onda sonora),   │
 │              mediaProtocol (media:// com Range), tempCleanup    │
 │ window.js    endurecimento (navegação, permissões, webview)     │
 └─────────────────────────────────────────────────────────────────┘

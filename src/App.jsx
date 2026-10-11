@@ -15,6 +15,7 @@ import RecoveryBanner from './components/RecoveryBanner';
 import RelinkDialog from './components/RelinkDialog';
 import MusicCard from './components/MusicCard';
 import TitlesPanel from './components/TitlesPanel';
+import HighlightsPanel from './components/HighlightsPanel';
 import TitleOverlay from './components/TitleOverlay';
 import { ColorFilterDefs } from './components/ColorFilters';
 import { newTitle } from './lib/titles';
@@ -480,6 +481,9 @@ function Editor() {
             <button role="tab" aria-selected={leftTab === 'captions'} className={leftTab === 'captions' ? 'active' : ''} onClick={() => setLeftTab('captions')}>
               <Icon.Captions width={14} height={14} /> Legendas{cues.length ? <span className="tab-badge">{cues.length}</span> : null}
             </button>
+            <button role="tab" aria-selected={leftTab === 'momentos'} className={leftTab === 'momentos' ? 'active' : ''} onClick={() => setLeftTab('momentos')}>
+              <Icon.Sparkles width={14} height={14} /> Melhores momentos
+            </button>
           </div>
           {leftTab === 'media' ? (
             <div className="media-tab">
@@ -494,6 +498,14 @@ function Editor() {
               onAdd={addTitle}
               api={titlesApi}
               getTime={player.getTime}
+            />
+          ) : leftTab === 'momentos' ? (
+            <HighlightsPanel
+              clip={selectedClip}
+              transcripts={transcripts}
+              player={player}
+              onExport={(job) => { exportQueue.enqueue([job]); notify(`"${job.label}" entrou na fila de exportação.`); }}
+              notify={notify}
             />
           ) : (
             <CaptionsPanel

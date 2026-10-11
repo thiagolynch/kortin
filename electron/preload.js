@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('kortin', {
   probeAudio: (filePath) => ipcRenderer.invoke('media:probeAudio', filePath),
   searchMediaFolder: (names) => ipcRenderer.invoke('media:searchFolder', names),
 
+  // melhores momentos (shorts para TikTok/Instagram/YouTube)
+  findHighlights: (opts) => ipcRenderer.invoke('highlights:find', opts),
+
   // legenda automática
   captionsStatus: () => ipcRenderer.invoke('captions:status'),
   downloadModel: (key) => ipcRenderer.invoke('captions:download', key),

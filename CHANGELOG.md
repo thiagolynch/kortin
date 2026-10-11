@@ -3,6 +3,14 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.5] — 2026-10-11
+
+### Melhores momentos (shorts para TikTok, Reels e YouTube Shorts)
+- Nova aba **"Melhores momentos"**: analisa a onda sonora do clipe selecionado (e a transcrição, se já tiver sido feita) e sugere trechos para virar um vídeo curto — tudo local, sem IA paga nem internet.
+- Cada sugestão mostra uma **nota comparativa** e o motivo ("pico de energia sonora" ou "pico de energia e fala"); dá para ouvir o trecho antes de decidir.
+- Um clique exporta o trecho já em **9:16** — o mesmo corte serve para TikTok, Instagram Reels e YouTube Shorts, que usam esse formato — pela fila de exportação de sempre.
+- Pensado para um público maior que o de ferramentas de automação por linha de comando com IA (que exigem assinatura paga e não rodam no Windows): aqui é um botão, local, grátis, sem marca d'água.
+
 ## [0.7.4] — 2026-10-11
 
 ### Títulos: inspirado em reels, 3 melhorias de tipografia

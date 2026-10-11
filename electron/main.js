@@ -64,6 +64,7 @@ if (!app.requestSingleInstanceLock()) {
     require('./ipc/project').register(ctx);
     require('./ipc/export').register(ctx);
     require('./ipc/captions').register(ctx);
+    require('./ipc/highlights').register(ctx);
     require('./ipc/app').register(ctx);
 
     tempCleanup.cleanup(ctx.modelsDir());

@@ -6,6 +6,7 @@ const { audioPeaks } = require('./services/ffmpeg/waveform');
 const { HW_ENCODERS, encoderArgs, detectHardwareEncoders } = require('./services/ffmpeg/encoders');
 const { atempoChain, outDuration, buildGraph, buildExportArgs } = require('./services/ffmpeg/filtergraph');
 const { exportVideo } = require('./services/ffmpeg/exporter');
+const { findHighlights } = require('./services/highlights/detect');
 
 module.exports = {
   FFMPEG,
@@ -23,4 +24,5 @@ module.exports = {
   buildGraph,
   buildExportArgs,
   exportVideo,
+  findHighlights,
 };
