@@ -211,34 +211,34 @@ function check(cond, msg) {
   check(mmRes.parts > 1 && mmInfo && Math.abs(mmInfo.duration - 10) < 0.1 && band(mmOut, 4, 2) > -45, `Música na exportação em partes: ${mmRes.parts} partes, ${mmInfo?.duration.toFixed(2)}s`);
 
   // Projeto completo do checklist do beta: 24 clipes (em partes) + música com abaixamento + legenda queimada
-  const full = Array.from({ length: 24 }, (_, i) => ({
+  const proj = Array.from({ length: 24 }, (_, i) => ({
     path: i % 3 ? horizontal : vertical, inPoint: (i % 5) * 0.2, outPoint: (i % 5) * 0.2 + 0.5,
     hasAudio: i % 3 !== 0, volume: 1, speed: [1, 1.5, 2][i % 3], fadeIn: 0.1, fadeOut: 0.1, denoise: i % 4 === 0,
   }));
-  const fullDur = full.reduce((t, c) => t + (c.outPoint - c.inPoint) / c.speed, 0);
-  const fullCues = Array.from({ length: Math.floor(fullDur) }, (_, k) => ({
+  const projDur = proj.reduce((t, c) => t + (c.outPoint - c.inPoint) / c.speed, 0);
+  const projCues = Array.from({ length: Math.floor(projDur) }, (_, k) => ({
     start: k, end: k + 0.9, words: [{ start: k, end: k + 0.45, text: 'Teste' }, { start: k + 0.45, end: k + 0.9, text: `${k + 1}!` }],
   }));
-  const fullOut = path.join(tmp, 'projeto-completo.mp4');
-  const fullRes = await engine.exportVideo(full, {
-    width: 1080, height: 1920, fit: 'blur', crf: 32, preset: 'ultrafast', output: fullOut,
-    captions: { cues: fullCues, settings: { style: 'destaque', size: 'm', position: 0.72 } },
+  const projOut = path.join(tmp, 'projeto-completo.mp4');
+  const projRes = await engine.exportVideo(proj, {
+    width: 1080, height: 1920, fit: 'blur', crf: 32, preset: 'ultrafast', output: projOut,
+    captions: { cues: projCues, settings: { style: 'destaque', size: 'm', position: 0.72 } },
     music: { path: music, volume: 0.3, duck: true, fadeIn: 1, fadeOut: 1 },
   }).promise;
-  const fullInfo = fullRes.ok ? await engine.probe(fullOut) : null;
-  const expectedFull = Math.round(fullDur * 30) / 30;
+  const projInfo = projRes.ok ? await engine.probe(projOut) : null;
+  const expectedProj = Math.round(projDur * 30) / 30;
   // legenda: compara o mesmo quadro com e sem legenda na faixa onde ela fica (o vídeo de teste é claro,
   // então "contar pixels claros" não prova nada — a diferença entre as duas versões prova)
   const noCapOut = path.join(tmp, 'projeto-completo-sem-legenda.mp4');
-  await engine.exportVideo(full, { width: 1080, height: 1920, fit: 'blur', crf: 32, preset: 'ultrafast', output: noCapOut }).promise;
+  await engine.exportVideo(proj, { width: 1080, height: 1920, fit: 'blur', crf: 32, preset: 'ultrafast', output: noCapOut }).promise;
   const bandPixels = (file) => spawnSync(engine.FFMPEG, ['-hide_banner', '-loglevel', 'error', '-ss', '2.3', '-i', file, '-frames:v', '1', '-vf', 'crop=iw:ih*0.12:0:ih*0.66,scale=96:24,format=gray', '-f', 'rawvideo', '-']).stdout || Buffer.alloc(0);
-  const a = bandPixels(fullOut);
-  const b = bandPixels(noCapOut);
-  const changed = a.length && a.length === b.length ? [...a].filter((v, i) => Math.abs(v - b[i]) > 40).length : 0;
-  const musicLevel = band(fullOut, 1.5, 3);
+  const withCap = bandPixels(projOut);
+  const noCap = bandPixels(noCapOut);
+  const changed = withCap.length && withCap.length === noCap.length ? [...withCap].filter((v, i) => Math.abs(v - noCap[i]) > 40).length : 0;
+  const musicLevel = band(projOut, 1.5, 3);
   check(
-    fullRes.ok && fullRes.parts > 1 && fullInfo && Math.abs(fullInfo.duration - expectedFull) < 0.05 && musicLevel > -50 && changed > 40,
-    `Projeto completo: ${fullRes.parts} partes, ${fullInfo?.duration.toFixed(2)}s (esperado ${expectedFull.toFixed(2)}s), música ${musicLevel} dB, legenda mudou ${changed} de ${a.length} pontos da faixa`
+    projRes.ok && projRes.parts > 1 && projInfo && Math.abs(projInfo.duration - expectedProj) < 0.05 && musicLevel > -50 && changed > 40,
+    `Projeto completo: ${projRes.parts} partes, ${projInfo?.duration.toFixed(2)}s (esperado ${expectedProj.toFixed(2)}s), música ${musicLevel} dB, legenda mudou ${changed} de ${withCap.length} pontos da faixa`
   );
 
   if (failures) {
