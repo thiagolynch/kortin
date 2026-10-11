@@ -101,7 +101,9 @@ A interface roda isolada (sandbox, CSP, sem acesso direto ao sistema); o process
 | 0.6 | Cortes sugeridos e música de fundo com abaixamento | pronto |
 | 0.6.1 | Preparação do beta: diagnóstico do PC e link direto de download | pronto |
 | 0.7 | Cores, transições, títulos, melhores momentos, legenda com cor/palavra-chave/empilhamento, zoom e vinheta | pronto |
-| próximas | Beta fechado · sistema de licença e compra · marca própria e templates | planejado |
+| 0.7.9–0.7.10 | Camada de sobreposição (reação, logo, chroma key) · correção de defeitos reais na exportação (zoom, vinheta, HDR nunca chegavam da interface ao motor) | pronto |
+| próximas | Auditoria técnica adicional · beta fechado · sistema de licença e compra · marca própria e templates | planejado |
+| depois do beta | Roteiro com IA (opcional, com chave própria do usuário): transforma a transcrição local em um briefing de edição — hook, cortes, legenda e B-roll sugeridos. Fica desligado por padrão; o núcleo do Kortin continua 100% local sem essa opção. | em avaliação |
 
 Histórico completo no [CHANGELOG](CHANGELOG.md).
 
