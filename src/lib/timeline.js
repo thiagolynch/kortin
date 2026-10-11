@@ -201,7 +201,22 @@ export const musicFields = (m) => (m ? {
   volume: m.volume ?? MUSIC_DEFAULTS.volume, duck: m.duck ?? true, fadeIn: m.fadeIn ?? 0, fadeOut: m.fadeOut ?? 0,
 } : null);
 
-export function serializeProject({ clips, aspect, fit, captions, transcripts, music, titles }) {
+// ---------------- Sobreposição (camada extra, não é trilha arrastável) ----------------
+
+export const OVERLAY_DEFAULTS = {
+  start: 0, inPoint: 0, x: 0.78, y: 0.78, scale: 0.35, opacity: 1,
+  chroma: { enabled: false, color: '#00ff00', similarity: 0.2, blend: 0.1 },
+};
+
+/** Só os campos da sobreposição que vão para o projeto e para a exportação */
+export const overlayFields = (o) => (o ? {
+  path: o.path, name: o.name, duration: o.duration, width: o.width, height: o.height, hasAudio: !!o.hasAudio,
+  start: o.start ?? 0, end: o.end, inPoint: o.inPoint ?? 0, outPoint: o.outPoint ?? (o.end - (o.start ?? 0)),
+  x: o.x ?? OVERLAY_DEFAULTS.x, y: o.y ?? OVERLAY_DEFAULTS.y, scale: o.scale ?? OVERLAY_DEFAULTS.scale,
+  opacity: o.opacity ?? OVERLAY_DEFAULTS.opacity, chroma: { ...OVERLAY_DEFAULTS.chroma, ...(o.chroma || {}) },
+} : null);
+
+export function serializeProject({ clips, aspect, fit, captions, transcripts, music, titles, overlay }) {
   const used = new Set(clips.map((c) => c.path));
   return {
     app: 'kortin',
@@ -209,13 +224,17 @@ export function serializeProject({ clips, aspect, fit, captions, transcripts, mu
     aspect,
     fit,
     // duration: para conferir, ao reabrir em outro lugar, se o vídeo achado é o mesmo
-    clips: clips.map(({ id, path, name, duration, inPoint, outPoint, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut }) => ({
+    clips: clips.map(({
+      id, path, name, duration, inPoint, outPoint, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut, zoom, vignette,
+    }) => ({
       id, path, name, duration, inPoint, outPoint,
       volume: volume ?? 1, speed: speed ?? 1, fadeIn: fadeIn ?? 0, fadeOut: fadeOut ?? 0, denoise: !!denoise,
       filter: filter || 'natural', videoFadeIn: videoFadeIn ?? 0, videoFadeOut: videoFadeOut ?? 0,
+      zoom: zoom || 'none', vignette: !!vignette,
     })),
     ...(captions ? { captions } : {}),
     ...(music ? { music: musicFields(music) } : {}),
+    ...(overlay ? { overlay: overlayFields(overlay) } : {}),
     ...(titles?.length ? { titles: titles.map(({ id, text, start, duration, style, position }) => ({ id, text, start, duration, style, position })) } : {}),
     // só as transcrições dos vídeos que estão no projeto
     ...(transcripts
@@ -228,10 +247,12 @@ export function serializeProject({ clips, aspect, fit, captions, transcripts, mu
 export function remapProjectPaths(data, map) {
   const has = (p) => Object.prototype.hasOwnProperty.call(map, p);
   const musicMoved = data.music && has(data.music.path);
-  if (!data.clips.some((c) => has(c.path)) && !musicMoved) return data;
+  const overlayMoved = data.overlay && has(data.overlay.path);
+  if (!data.clips.some((c) => has(c.path)) && !musicMoved && !overlayMoved) return data;
   return {
     ...data,
     ...(musicMoved ? { music: { ...data.music, path: map[data.music.path] } } : {}),
+    ...(overlayMoved ? { overlay: { ...data.overlay, path: map[data.overlay.path] } } : {}),
     clips: data.clips.map((c) => (has(c.path) ? { ...c, path: map[c.path] } : c)),
     transcripts: data.transcripts
       ? Object.fromEntries(Object.entries(data.transcripts).map(([p, t]) => [has(p) ? map[p] : p, t]))
@@ -270,6 +291,8 @@ export function restoreClips(saved, infoByPath) {
         filter: Object.prototype.hasOwnProperty.call(C.FILTERS, c.filter) ? c.filter : 'natural',
         videoFadeIn: clamp(c.videoFadeIn ?? 0, 0, C.MAX_VIDEO_FADE),
         videoFadeOut: clamp(c.videoFadeOut ?? 0, 0, C.MAX_VIDEO_FADE),
+        zoom: C.ZOOM_STYLES.includes(c.zoom) ? c.zoom : 'none',
+        vignette: !!c.vignette,
       };
     });
 }

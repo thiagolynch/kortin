@@ -14,6 +14,7 @@ import CaptionsPanel from './components/CaptionsPanel';
 import RecoveryBanner from './components/RecoveryBanner';
 import RelinkDialog from './components/RelinkDialog';
 import MusicCard from './components/MusicCard';
+import OverlayCard from './components/OverlayCard';
 import TitlesPanel from './components/TitlesPanel';
 import HighlightsPanel from './components/HighlightsPanel';
 import TitleOverlay from './components/TitleOverlay';
@@ -25,7 +26,8 @@ import { CUT_TYPES, FILLERS, MAX_CHARS, applyCuts, deriveCues, editCue, suggestC
 import { usePlayer } from './lib/usePlayer';
 import { useMusic } from './hooks/useMusic';
 import {
-  ASPECTS, FITS, MUSIC_DEFAULTS, baseName, buildSegments, cleanError, mediaToClip, musicFields, smoothAllJoins, splitAt, totalOf, uid,
+  ASPECTS, FITS, MUSIC_DEFAULTS, OVERLAY_DEFAULTS, baseName, buildSegments, cleanError, mediaToClip, musicFields, overlayFields,
+  smoothAllJoins, splitAt, totalOf, uid,
 } from './lib/timeline';
 import { patchClip, useDocument } from './state/document';
 import { useMediaLibrary } from './hooks/useMediaLibrary';
@@ -79,7 +81,7 @@ export default function App() {
 function Editor() {
   const docApi = useDocument();
   const { doc, ops } = docApi;
-  const { clips, aspect, fit, captions: captionSettings, transcripts, music, titles } = doc;
+  const { clips, aspect, fit, captions: captionSettings, transcripts, music, titles, overlay } = doc;
   const docRef = useRef(doc);
   docRef.current = doc;
 
@@ -333,6 +335,42 @@ function Editor() {
     onEnd: ops.end,
   }), [ops, setMusicFromPath]);
 
+  // ---------- Sobreposição (camada extra: câmera de reação, logo, fundo verde) ----------
+  const [overlayBusy, setOverlayBusy] = useState(false);
+  const setOverlayFromPath = useCallback(async (p) => {
+    if (!p) return;
+    setOverlayBusy(true);
+    try {
+      const info = await window.kortin.probe(p);
+      // trocar o vídeo mantém posição, tamanho e chroma key anteriores
+      ops.commit((d) => ({
+        ...d,
+        overlay: {
+          ...OVERLAY_DEFAULTS,
+          ...(d.overlay ? overlayFields(d.overlay) : {}),
+          path: info.path, name: info.name, duration: info.duration, width: info.width, height: info.height, hasAudio: info.hasAudio,
+          start: 0, inPoint: 0, end: Math.min(info.duration, total || info.duration),
+          outPoint: Math.min(info.duration, total || info.duration),
+        },
+      }));
+      notify(`Sobreposição: ${info.name}`);
+    } catch (err) {
+      notify(`Não foi possível usar este vídeo: ${cleanError(err)}`);
+    } finally {
+      setOverlayBusy(false);
+    }
+  }, [ops, notify, total]);
+  const overlayApi = useMemo(() => ({
+    onPick: async () => setOverlayFromPath((await window.kortin.openVideos())?.[0]),
+    onRemove: () => ops.set('overlay', null),
+    onChange: (patch) => ops.commit((d) => (d.overlay ? { ...d, overlay: { ...d.overlay, ...patch } } : d)),
+    onPreview: (patch) => {
+      ops.begin();
+      ops.preview((d) => (d.overlay ? { ...d, overlay: { ...d.overlay, ...patch } } : d));
+    },
+    onEnd: ops.end,
+  }), [ops, setOverlayFromPath]);
+
   // ---------- Cor e transições (todos os clipes) ----------
   const onFilterAll = useCallback((f) => {
     ops.commit((d) => ({ ...d, clips: d.clips.map((c) => (c.filter === f ? c : { ...c, filter: f })) }));
@@ -489,6 +527,7 @@ function Editor() {
             <div className="media-tab">
               <MediaBin media={library.media} busy={library.busy} onImport={openImport} onAdd={addFromBin} />
               <MusicCard music={music} total={total} busy={musicBusy} {...musicApi} />
+              <OverlayCard overlay={overlay} busy={overlayBusy} {...overlayApi} />
             </div>
           ) : leftTab === 'textos' ? (
             <TitlesPanel
@@ -533,6 +572,7 @@ function Editor() {
             onOpenProject={() => project.openProject()}
             cues={cues}
             captionSettings={captionSettings}
+            overlay={overlay}
           >
             {(box) => (
               <TitleOverlay
@@ -633,6 +673,7 @@ function Editor() {
           captionSettings={captionSettings}
           music={musicFields(music)}
           titles={titles}
+          overlay={overlay}
           onQueue={exportQueue.enqueue}
           onClose={() => setExporting(false)}
         />

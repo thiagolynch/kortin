@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { ASPECTS, locate, videoFadeBlack, zoomScale } from '../lib/timeline';
+import { ASPECTS, locate, mediaUrl, videoFadeBlack, zoomScale } from '../lib/timeline';
 import { filterCss } from './ColorFilters';
 import { useDerivedPlayhead } from '../state/playhead';
 import CaptionOverlay from './CaptionOverlay';
@@ -53,7 +53,74 @@ function VignetteOverlay({ clip }) {
   return clip?.vignette ? <div className="frame-vignette" aria-hidden="true" /> : null;
 }
 
-function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject, cues, captionSettings, children }) {
+/**
+ * Camada de sobreposição na prévia: um <video> próprio, posicionado e dimensionado pelos campos
+ * x/y/scale/opacity, sincronizado com o cursor da timeline (mesmo padrão da música de fundo).
+ * Limitação honesta: a remoção de fundo verde (chroma key) é só na exportação — aqui o vídeo
+ * aparece inteiro, só posicionado e redimensionado, para dar uma ideia de onde ele vai ficar.
+ */
+function OverlayLayer({ overlay, store, width, height }) {
+  const videoElRef = useRef(null);
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (!overlay?.path) return undefined;
+    const v = document.createElement('video');
+    v.src = mediaUrl(overlay.path);
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.style.width = '100%';
+    v.style.height = '100%';
+    v.style.objectFit = 'cover';
+    videoElRef.current = v;
+    if (boxRef.current) boxRef.current.appendChild(v);
+    return () => {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+      if (v.parentNode) v.parentNode.removeChild(v);
+      videoElRef.current = null;
+    };
+  }, [overlay?.path]);
+
+  useEffect(() => {
+    const sync = () => {
+      const v = videoElRef.current;
+      if (!v || !overlay) return;
+      const { time, playing } = store.get();
+      const inside = time >= overlay.start && time < overlay.end;
+      v.style.visibility = inside ? 'visible' : 'hidden';
+      if (!inside) { if (!v.paused) v.pause(); return; }
+      const target = overlay.inPoint + (time - overlay.start);
+      if (playing) {
+        if (v.paused) { v.currentTime = target; v.play().catch(() => {}); }
+        else if (Math.abs(v.currentTime - target) > 0.3) v.currentTime = target;
+      } else {
+        if (!v.paused) v.pause();
+        if (Math.abs(v.currentTime - target) > 0.05) v.currentTime = target;
+      }
+    };
+    sync();
+    return store.subscribe(sync);
+  }, [store, overlay]);
+
+  if (!overlay?.path || !width || !height) return null;
+  const ow = Math.round(width * overlay.scale);
+  const oh = Math.round(ow * ((overlay.height || 1) / (overlay.width || 1)));
+  const ox = Math.round(overlay.x * width - ow / 2);
+  const oy = Math.round(overlay.y * height - oh / 2);
+  return (
+    <div
+      ref={boxRef}
+      className="frame-overlay-layer"
+      style={{ position: 'absolute', left: ox, top: oy, width: ow, height: oh, opacity: overlay.opacity, overflow: 'hidden' }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject, cues, captionSettings, overlay, children }) {
   // clipe atual: só muda quando o cursor passa de um clipe para outro
   const index = useDerivedPlayhead(player.store, (t) => locate(segments, t)?.index ?? -1, [segments]);
   const current = segments[index]?.clip;
@@ -100,6 +167,7 @@ function Preview({ player, segments, aspect, fit, empty, onImport, onOpenProject
         <VignetteOverlay clip={current} />
         <FadeLayer store={player.store} segments={segments} />
         <CaptionOverlay cues={cues} store={player.store} settings={captionSettings} width={box.w} height={box.h} />
+        <OverlayLayer overlay={overlay} store={player.store} width={box.w} height={box.h} />
         {children?.(box)}
         {empty && (
           <div className="frame-empty">

@@ -3,6 +3,24 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.9] — 2026-10-11
+
+### Camada de sobreposição (reação, logo, chroma key)
+Primeiro passo rumo a uma timeline com mais de uma trilha — escopo deliberadamente reduzido: uma única camada extra por projeto, não trilhas múltiplas arrastáveis. Pensado para os casos de uso reais mais comuns de um short-form (câmera de reação, logo da marca, personagem em frente a um fundo verde), que é exatamente onde o chroma key apareceu como recurso relevante numa análise comparativa com os 10 editores do estilo CapCut.
+
+- **Vídeo de sobreposição**: um segundo vídeo (ou .mov/.mp4/.webm) por cima da timeline principal, numa janela de tempo fixa, com posição (x/y), tamanho e opacidade ajustáveis.
+- **Remoção de fundo verde (chroma key)**: um toggle com cor, sensibilidade e suavização de borda — filtro `colorkey` do FFmpeg.
+- Funciona junto com legenda, títulos e música de fundo, inclusive no caminho de exportação em partes (projetos com mais de 16 clipes).
+- Reaproveita a infraestrutura existente: mesmo diálogo de importar vídeo e a mesma leitura de metadados já usados para os clipes principais — sem código novo de IPC.
+
+**Limitação honesta**: é uma camada só (não dá pra ter duas sobreposições ao mesmo tempo), sem áudio próprio (o áudio do vídeo de sobreposição não entra no vídeo final) e sem arrastar na timeline — a janela de tempo é fixa, ajustada só pelos campos de início/fim. A remoção do fundo verde também só aparece no vídeo exportado: na prévia o vídeo de sobreposição aparece inteiro (com o fundo), só posicionado e redimensionado, para dar uma ideia de onde ele vai ficar.
+
+### Correção: zoom e vinheta (v0.7.8) não chegavam a funcionar na exportação real
+Dois defeitos reais encontrados ao revisar o código da feature anterior, antes de mexer nela de novo:
+
+- Salvar e reabrir um projeto perdia silenciosamente o zoom e a vinheta de cada clipe (`serializeProject`/`restoreClips` nunca incluíam esses dois campos).
+- Mais grave: a tela de exportação também nunca incluía zoom e vinheta no trabalho enviado para o motor de exportação — então, embora o recurso funcionasse corretamente por dentro (motor, validação, prévia), **nenhuma exportação feita pela interface do programa realmente usava zoom ou vinheta** desde que foram lançados. Os dois pontos foram corrigidos nesta versão.
+
 ## [0.7.8] — 2026-10-11
 
 ### Efeitos visuais: zoom (Ken Burns) e vinheta cinematográfica

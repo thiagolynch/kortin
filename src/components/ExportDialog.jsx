@@ -5,7 +5,7 @@ import { titlesForExport } from '../lib/titles';
 
 /** Configura a exportação e devolve os trabalhos para a fila (a exportação roda em segundo plano). */
 export default function ExportDialog({
-  clips, total, aspect, fit, projectName, segments, transcripts, captionSettings, music, titles = [], onQueue, onClose,
+  clips, total, aspect, fit, projectName, segments, transcripts, captionSettings, music, titles = [], overlay, onQueue, onClose,
 }) {
   const [formats, setFormats] = useState([aspect]);
   const [quality, setQuality] = useState('padrao');
@@ -42,8 +42,10 @@ export default function ExportDialog({
       }
       const q = QUALITIES[quality];
       const encoder = useHw && hardware?.length ? hardware[0].id : 'libx264';
-      const snapshot = clips.map(({ path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut }) => ({
-        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut,
+      const snapshot = clips.map(({
+        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut, zoom, vignette,
+      }) => ({
+        path, inPoint, outPoint, hasAudio, volume, speed, fadeIn, fadeOut, denoise, filter, videoFadeIn, videoFadeOut, zoom, vignette,
       }));
       // a legenda é montada por formato: no vertical, frases mais curtas
       const captionsFor = (k) => {
@@ -63,6 +65,13 @@ export default function ExportDialog({
             // títulos: as linhas são quebradas para cada formato (vertical cabe menos por linha)
             ...(titles.length ? { titles: titlesForExport(titles, k).filter((t) => t.start < total) } : {}),
             ...(music ? { music: { path: music.path, volume: music.volume, duck: music.duck, fadeIn: music.fadeIn, fadeOut: music.fadeOut } } : {}),
+            ...(overlay ? {
+              overlay: {
+                path: overlay.path, start: overlay.start, end: overlay.end, inPoint: overlay.inPoint, outPoint: overlay.outPoint,
+                width: overlay.width, height: overlay.height, x: overlay.x, y: overlay.y, scale: overlay.scale, opacity: overlay.opacity,
+                chroma: overlay.chroma,
+              },
+            } : {}),
           },
         }))
       );
@@ -79,7 +88,11 @@ export default function ExportDialog({
 
         <div className="export-summary">
           <div><label>Duração</label><strong>{formatTime(total)}</strong><small>{clips.length} clipe(s)</small></div>
-          <div><label>Enquadramento</label><strong>{FITS[fit]}</strong>{music && <small title={music.name}>♪ com música</small>}</div>
+          <div>
+            <label>Enquadramento</label><strong>{FITS[fit]}</strong>
+            {music && <small title={music.name}>♪ com música</small>}
+            {overlay && <small title={overlay.name}>▢ com sobreposição</small>}
+          </div>
           <div><label>Resolução</label><strong>1080p</strong><small>30 fps</small></div>
         </div>
 

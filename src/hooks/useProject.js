@@ -6,8 +6,8 @@ import { emptyDocument } from '../state/document';
 import { sanitizeTitles } from '../lib/titles';
 import { DEFAULT_CAPTIONS } from '../lib/captions';
 import {
-  ASPECTS, FITS, MUSIC_DEFAULTS, baseName, cleanError, durationMismatches, musicFields, remapProjectPaths, restoreClips,
-  serializeProject,
+  ASPECTS, FITS, MUSIC_DEFAULTS, OVERLAY_DEFAULTS, baseName, cleanError, durationMismatches, musicFields, overlayFields,
+  remapProjectPaths, restoreClips, serializeProject,
 } from '../lib/timeline';
 
 const AUTOSAVE_DELAY = 1500;
@@ -69,6 +69,19 @@ export function useProject({ docApi, library, player, notify, onLoaded, askRelin
         notifyLater = `A música "${baseName(data.music.path)}" não foi encontrada e ficou de fora.`;
       }
     }
+    // sobreposição: confirma que existe e lê largura/altura/duração atuais (se falhar, fica de fora)
+    let overlay = null;
+    if (data.overlay?.path) {
+      try {
+        const info = await window.kortin.probe(data.overlay.path);
+        overlay = {
+          ...OVERLAY_DEFAULTS, ...overlayFields(data.overlay),
+          name: info.name, duration: info.duration, width: info.width, height: info.height, hasAudio: info.hasAudio,
+        };
+      } catch {
+        notifyLater = `A sobreposição "${baseName(data.overlay.path)}" não foi encontrada e ficou de fora.`;
+      }
+    }
     const paths = [...new Set(data.clips.map((c) => c.path))];
     const { ok, errors } = await library.probeAll(paths);
     const infoByPath = Object.fromEntries(ok.map((i) => [i.path, i]));
@@ -81,6 +94,7 @@ export function useProject({ docApi, library, player, notify, onLoaded, askRelin
       transcripts: data.transcripts && typeof data.transcripts === 'object' ? data.transcripts : {},
       music,
       titles: sanitizeTitles(data.titles),
+      overlay,
     };
     library.replaceMedia(ok);
     ops.reset(next);

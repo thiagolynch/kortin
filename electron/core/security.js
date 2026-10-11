@@ -231,6 +231,45 @@ function validateMusic(m, grants) {
 }
 
 /**
+ * Camada de sobreposição: um 2º vídeo por cima do principal (reação, logo, chroma key), numa
+ * janela de tempo e posição fixas da timeline — não é uma trilha arrastável, é uma camada só.
+ */
+function validateOverlay(o, grants) {
+  if (o == null) return undefined;
+  if (typeof o !== 'object') fail('Sobreposição inválida.');
+  const p = assertVideoPath(o.path);
+  if (!grants.hasMedia(p)) fail('O vídeo de sobreposição não foi autorizado. Escolha-o de novo.');
+  const start = num(o.start, 'início da sobreposição', { min: 0, max: C.LIMITS.maxDurationSeconds });
+  const end = num(o.end, 'fim da sobreposição', { min: 0, max: C.LIMITS.maxDurationSeconds });
+  if (end <= start) fail('Sobreposição com duração inválida.');
+  const inPoint = num(o.inPoint ?? 0, 'início do trecho', { min: 0, max: C.LIMITS.maxDurationSeconds });
+  const outPoint = num(o.outPoint ?? (end - start), 'fim do trecho', { min: 0, max: C.LIMITS.maxDurationSeconds });
+  if (outPoint - inPoint < 0.04) fail('Sobreposição curta demais.');
+  const width = num(o.width ?? 16, 'largura do vídeo de sobreposição', { int: true, min: 1, max: 7680 });
+  const height = num(o.height ?? 9, 'altura do vídeo de sobreposição', { int: true, min: 1, max: 7680 });
+  const c = o.chroma || {};
+  return {
+    path: p,
+    start,
+    end,
+    inPoint,
+    outPoint,
+    width,
+    height,
+    x: num(o.x ?? 0.78, 'posição horizontal', { min: 0, max: 1 }),
+    y: num(o.y ?? 0.78, 'posição vertical', { min: 0, max: 1 }),
+    scale: num(o.scale ?? 0.35, 'tamanho da sobreposição', { min: 0.05, max: 1 }),
+    opacity: num(o.opacity ?? 1, 'opacidade da sobreposição', { min: 0, max: 1 }),
+    chroma: {
+      enabled: !!c.enabled,
+      color: HEX_COLOR.test(c.color) ? c.color.toLowerCase() : '#00ff00',
+      similarity: num(c.similarity ?? 0.2, 'sensibilidade do fundo verde', { min: 0.01, max: 1 }),
+      blend: num(c.blend ?? 0.1, 'suavização do fundo verde', { min: 0, max: 1 }),
+    },
+  };
+}
+
+/**
  * Valida um trabalho de exportação vindo do renderer.
  * Números entram em uma linha de filtros do FFmpeg: sem esta validação, um texto como
  * "1080,movie=C\\:/segredo.txt" viraria um filtro extra (injeção de filtergraph).
@@ -247,6 +286,7 @@ function validateExportJob(job, grants) {
   const clips = job.clips.map((c, i) => validateClip(c, grants, i));
   if (clips.some((c) => key(c.path) === key(output))) fail('O vídeo exportado não pode substituir um dos vídeos usados no projeto.');
   const music = validateMusic(o.music, grants);
+  const overlay = validateOverlay(o.overlay, grants);
   return {
     clips,
     options: {
@@ -261,6 +301,7 @@ function validateExportJob(job, grants) {
       captions: validateCaptions(o.captions),
       titles: validateTitles(o.titles),
       music,
+      overlay,
     },
   };
 }
@@ -278,6 +319,7 @@ module.exports = {
   assertMediaPath,
   validateMusic,
   validateTitles,
+  validateOverlay,
   validateExportJob,
   validateCaptions,
   num,

@@ -14,6 +14,7 @@ export const emptyDocument = (aspect = '9:16', fit = 'blur') => ({
   transcripts: {},
   music: null, // { path, name, duration, volume, duck, fadeIn, fadeOut }
   titles: [], // [{ id, text, start, duration, style, position }]
+  overlay: null, // { path, name, width, height, duration, hasAudio, start, end, inPoint, outPoint, x, y, scale, opacity, chroma }
 });
 
 const initial = (doc) => ({ doc, past: [], future: [], txn: null });

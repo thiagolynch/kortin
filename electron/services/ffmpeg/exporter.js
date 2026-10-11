@@ -121,8 +121,8 @@ function exportVideo(timeline, opts, onProgress, onEncoder) {
       if (cancelled) return null;
       const name = `parte-${String(i).padStart(4, '0')}.mkv`;
       const graphName = `grafo-${i}.txt`;
-      // partes sem música: ela entra uma vez só, no passo final (sem emendas audíveis)
-      const partOpts = { ...opts, music: null };
+      // partes sem música nem sobreposição: entram uma vez só, no passo final
+      const partOpts = { ...opts, music: null, overlay: null };
       fs.writeFileSync(path.join(workDir, graphName), buildGraph(parts[i], partOpts).graph, 'utf8');
       const partDur = parts[i].reduce((s, c) => s + c.dur, 0);
       const res = await ffmpeg(

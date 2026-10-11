@@ -274,6 +274,54 @@ function check(cond, msg) {
   const v7diff = [...v7a].filter((v, i) => Math.abs(v - v7b[i]) > 40).length;
   check(v7diff > 30, `Título gravado no vídeo: ${v7diff} pontos diferentes do vídeo sem título`);
 
+  // Sobreposição: um retângulo vermelho sólido por cima do canto, com e sem fundo verde removido
+  const overlayGreen = make('overlay-verde.mp4', [
+    '-f', 'lavfi', '-i', 'color=c=green:size=320x180:rate=30:duration=3',
+    '-f', 'lavfi', '-i', 'color=c=red:size=160x90:rate=30:duration=3',
+    '-filter_complex', '[0:v][1:v]overlay=(W-w)/2:(H-h)/2[v]', '-map', '[v]',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+  ]);
+  const ovClip = [{ path: horizontal, inPoint: 0, outPoint: 3, hasAudio: true, volume: 1, speed: 1 }];
+  const ovBase = { width: 1080, height: 1080, fit: 'contain', crf: 28, preset: 'ultrafast' };
+  const ovOut = path.join(tmp, 'sobreposicao.mp4');
+  const ovRes = await engine.exportVideo(ovClip, {
+    ...ovBase, output: ovOut,
+    overlay: {
+      path: overlayGreen, start: 0, end: 3, inPoint: 0, outPoint: 3, width: 320, height: 180,
+      x: 0.8, y: 0.8, scale: 0.3, opacity: 1, chroma: { enabled: false, color: '#00ff00', similarity: 0.2, blend: 0.1 },
+    },
+  }).promise;
+  const ovInfo = ovRes.ok ? await engine.probe(ovOut) : null;
+  // pixel no canto onde a sobreposição fica (perto de x=0.8·1080, y=0.8·1080): sem ela, é o padrão de teste
+  const pixelAt = (file, x, y) => spawnSync(engine.FFMPEG, ['-hide_banner', '-loglevel', 'error', '-ss', '1', '-i', file, '-frames:v', '1', '-vf', `crop=1:1:${x}:${y},format=rgb24`, '-f', 'rawvideo', '-']).stdout || Buffer.alloc(0);
+  const ovPixel = pixelAt(ovOut, 860, 860); // dentro do retângulo (verde+vermelho) de ~324x324 centrado em (864,864)
+  const isGreenish = ovPixel.length === 3 && ovPixel[1] > ovPixel[0] && ovPixel[1] > ovPixel[2];
+  const isReddish = ovPixel.length === 3 && ovPixel[0] > ovPixel[1] && ovPixel[0] > ovPixel[2];
+  check(ovRes.ok && ovInfo && Math.abs(ovInfo.duration - 3) < 0.1 && (isGreenish || isReddish), `Sobreposição aplicada: vídeo com ${ovInfo?.duration.toFixed(2)}s, pixel da sobreposição = rgb(${[...ovPixel]})`);
+
+  // Com chroma key: o verde deve sair (e o vídeo de baixo aparecer no lugar dele)
+  const ovChromaOut = path.join(tmp, 'sobreposicao-chroma.mp4');
+  const ovChromaRes = await engine.exportVideo(ovClip, {
+    ...ovBase, output: ovChromaOut,
+    overlay: {
+      path: overlayGreen, start: 0, end: 3, inPoint: 0, outPoint: 3, width: 320, height: 180,
+      x: 0.8, y: 0.8, scale: 0.3, opacity: 1, chroma: { enabled: true, color: '#008000', similarity: 0.4, blend: 0.1 },
+    },
+  }).promise;
+  const chromaPixel = pixelAt(ovChromaOut, 864, 864); // mesmo ponto: devia deixar de ser verde puro
+  const stillPureGreen = chromaPixel.length === 3 && chromaPixel[1] > 150 && chromaPixel[0] < 40 && chromaPixel[2] < 40;
+  check(ovChromaRes.ok && !stillPureGreen, `Chroma key remove o fundo verde: pixel = rgb(${[...chromaPixel]})`);
+
+  // Sobreposição também no caminho em partes (mais de 16 clipes)
+  const manyOverlay = Array.from({ length: 20 }, () => ({ path: horizontal, inPoint: 0, outPoint: 0.4, hasAudio: true, volume: 1, speed: 1 }));
+  const moOut = path.join(tmp, 'sobreposicao-partes.mp4');
+  const moRes = await engine.exportVideo(manyOverlay, {
+    width: 540, height: 960, fit: 'cover', crf: 35, preset: 'ultrafast', output: moOut,
+    overlay: { path: overlayGreen, start: 0, end: 8, inPoint: 0, outPoint: 3, width: 320, height: 180, x: 0.5, y: 0.5, scale: 0.4, opacity: 1, chroma: { enabled: false, color: '#00ff00', similarity: 0.2, blend: 0.1 } },
+  }).promise;
+  const moInfo = moRes.ok ? await engine.probe(moOut) : null;
+  check(moRes.parts > 1 && moInfo && Math.abs(moInfo.duration - 8) < 0.1, `Sobreposição na exportação em partes: ${moRes.parts} partes, ${moInfo?.duration.toFixed(2)}s`);
+
   if (failures) {
     console.error(`\n${failures} teste(s) falharam.`);
     process.exit(1);

@@ -168,6 +168,27 @@ function musicMix(mainLabel, musicIndex, total, music) {
 }
 
 /**
+ * Camada de sobreposição: um 2º vídeo por cima do principal (reação, logo, chroma key), numa
+ * posição e janela de tempo fixas da linha do tempo — não é uma trilha arrastável, é uma única
+ * camada extra. `tpad` desloca o começo do vídeo pro instante certo da timeline (os quadros de
+ * preenchimento ficam escondidos pelo `enable`, que só mostra a camada entre `start` e `end`).
+ */
+const overlayInput = (ov) => ['-ss', n(ov.inPoint), '-t', n(Math.max(0.04, Math.min(ov.outPoint - ov.inPoint, ov.end - ov.start))), '-i', ov.path];
+
+function overlayFilter(ov, idx, W, H, srcLabel = 'outv0') {
+  const dur = Math.max(0.04, Math.min(ov.outPoint - ov.inPoint, ov.end - ov.start));
+  const endEff = ov.start + dur;
+  const ow = Math.max(2, Math.round(W * ov.scale));
+  const oh = Math.max(2, Math.round(ow * ((ov.height || 1) / (ov.width || 1))));
+  const ox = Math.round(ov.x * W - ow / 2);
+  const oy = Math.round(ov.y * H - oh / 2);
+  const chroma = ov.chroma?.enabled ? `,colorkey=0x${ov.chroma.color.replace('#', '')}:${ov.chroma.similarity}:${ov.chroma.blend}` : '';
+  const chain = `[${idx}:v:0]setpts=PTS-STARTPTS,tpad=start_duration=${n(ov.start)}:start_mode=add,scale=${ow}:-2${chroma},format=yuva420p,colorchannelmixer=aa=${ov.opacity.toFixed(3)}[ov]`;
+  const composite = `[${srcLabel}][ov]overlay=x=${ox}:y=${oy}:enable='between(t\\,${n(ov.start)}\\,${n(endEff)})'[outvov]`;
+  return { chain, composite };
+}
+
+/**
  * Monta { inputs, graph } para a exportação.
  * inputs: argumentos de entrada · graph: o texto do -filter_complex (vai para um arquivo)
  */
@@ -193,11 +214,21 @@ function buildGraph(clips, opts) {
 
   const music = opts.music || null;
   filters.push(`${clips.map((_, i) => `[v${i}][a${i}]`).join('')}concat=n=${clips.length}:v=1:a=1[outv0][${music ? 'amain' : 'outa'}]`);
+  let nextIndex = silentIndex;
   if (music) {
     inputs.push(...musicInput(music));
+    nextIndex++;
     filters.push(...musicMix('[amain]', silentIndex, clips.reduce((t, c) => t + durOf(c), 0), music));
   }
-  filters.push(opts.captionFilter ? `[outv0]${opts.captionFilter}[outv]` : '[outv0]null[outv]');
+  const overlay = opts.overlay || null;
+  let videoLabel = 'outv0';
+  if (overlay) {
+    inputs.push(...overlayInput(overlay));
+    const { chain, composite } = overlayFilter(overlay, nextIndex, ctx.W, ctx.H, 'outv0');
+    filters.push(chain, composite);
+    videoLabel = 'outvov';
+  }
+  filters.push(opts.captionFilter ? `[${videoLabel}]${opts.captionFilter}[outv]` : `[${videoLabel}]null[outv]`);
   return { inputs, graph: filters.join(';\n') };
 }
 
@@ -227,14 +258,36 @@ function buildExportArgs(clips, opts, { graphFile, intermediate = false } = {}) 
  * todos ao mesmo tempo), aplica a legenda e codifica no formato pedido.
  */
 function buildConcatArgs(listFile, opts) {
-  // com música, o passo final vira um grafo: vídeo (+legenda) e áudio misturado com a música
-  const mix = opts.music
-    ? [
-      ...musicInput(opts.music),
-      '-filter_complex', [`[0:v:0]${opts.captionFilter || 'null'}[outv]`, ...musicMix('[0:a:0]', 1, opts.total, opts.music)].join(';'),
-      '-map', '[outv]', '-map', '[outa]',
-    ]
-    : [...(opts.captionFilter ? ['-vf', opts.captionFilter] : []), '-map', '0:v:0', '-map', '0:a:0'];
+  // com música e/ou sobreposição, o passo final vira um grafo: vídeo (+sobreposição, +legenda)
+  // e áudio (misturado com a música, se houver)
+  const music = opts.music || null;
+  const overlay = opts.overlay || null;
+  const extraInputs = [];
+  let nextIdx = 1; // 0 = demuxer concat (vídeo+áudio já emendados)
+  let musicIdx = null;
+  let overlayIdx = null;
+  if (music) { extraInputs.push(...musicInput(music)); musicIdx = nextIdx++; }
+  if (overlay) { extraInputs.push(...overlayInput(overlay)); overlayIdx = nextIdx++; }
+
+  let mix;
+  if (music || overlay) {
+    const chains = [];
+    let videoLabel = '0:v:0';
+    if (overlay) {
+      const { chain, composite } = overlayFilter(overlay, overlayIdx, opts.width, opts.height, '0:v:0');
+      chains.push(chain, composite);
+      videoLabel = 'outvov';
+    }
+    chains.push(`[${videoLabel}]${opts.captionFilter || 'null'}[outv]`);
+    if (music) chains.push(...musicMix('[0:a:0]', musicIdx, opts.total, music));
+    mix = [
+      ...extraInputs,
+      '-filter_complex', chains.join(';'),
+      '-map', '[outv]', '-map', music ? '[outa]' : '0:a:0',
+    ];
+  } else {
+    mix = [...(opts.captionFilter ? ['-vf', opts.captionFilter] : []), '-map', '0:v:0', '-map', '0:a:0'];
+  }
   return [
     '-hide_banner', '-y', '-nostdin',
     '-f', 'concat', '-safe', '0', '-i', listFile,
@@ -249,5 +302,6 @@ function buildConcatArgs(listFile, opts) {
 const INTERMEDIATE_CRF = 12;
 
 module.exports = {
-  atempoChain, outDuration, frameAccurate, colorFilter, zoomFilter, vignetteFilter, buildGraph, buildExportArgs, buildConcatArgs,
+  atempoChain, outDuration, frameAccurate, colorFilter, zoomFilter, vignetteFilter, overlayInput, overlayFilter,
+  buildGraph, buildExportArgs, buildConcatArgs,
 };
