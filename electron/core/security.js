@@ -120,6 +120,9 @@ function num(v, label, { min = -Infinity, max = Infinity, int = false } = {}) {
 }
 
 const oneOf = (v, list, label) => (list.includes(v) ? v : fail(`Opção inválida em ${label}.`));
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+/** Cor opcional (null = usa a cor padrão do estilo). Nunca deixa string arbitrária chegar no .ass. */
+const hexOrNull = (v) => (v == null ? null : (HEX_COLOR.test(v) ? v.toLowerCase() : fail('Cor inválida.')));
 
 // ---------------- Exportação ----------------
 
@@ -167,6 +170,9 @@ function validateTitles(titles) {
       start, end, lines,
       style: oneOf(t.style ?? 'titulo', C.TITLE_STYLES, 'estilo do título'),
       position: num(t.position ?? 0.5, 'altura do título', { min: 0, max: 1 }),
+      color: hexOrNull(t.color ?? null),
+      accent: hexOrNull(t.accent ?? null),
+      anim: oneOf(t.anim ?? 'fade', C.TITLE_ANIMS, 'animação do título'),
     };
   });
 }

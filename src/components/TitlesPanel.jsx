@@ -1,4 +1,4 @@
-import { TITLE_LIMITS, TITLE_STYLES } from '../lib/titles';
+import { TITLE_ANIMS, TITLE_LIMITS, TITLE_STYLES, TITLE_SWATCHES } from '../lib/titles';
 import { formatTime } from '../lib/timeline';
 import { Icon } from './Icons';
 
@@ -37,6 +37,35 @@ export default function TitlesPanel({ titles, selectedId, onSelect, onAdd, api, 
               <button key={k} className={sel.style === k ? 'active' : ''} onClick={() => api.commit(sel.id, { style: k, position: s.position })}>{s.label}</button>
             ))}
           </div>
+
+          <div className="insp-control-head"><label>Entrada</label></div>
+          <div className="segmented compact">
+            {Object.entries(TITLE_ANIMS).map(([k, label]) => (
+              <button key={k} className={sel.anim === k ? 'active' : ''} onClick={() => api.commit(sel.id, { anim: k })}>{label}</button>
+            ))}
+          </div>
+
+          <div className="insp-control-head"><label>Cores</label></div>
+          <div className="title-swatches">
+            {TITLE_SWATCHES.map((sw) => (
+              <button
+                key={sw.label}
+                className={`title-swatch${(sel.color ?? null) === sw.color && (sel.accent ?? null) === sw.accent ? ' active' : ''}`}
+                title={sw.label}
+                style={sw.color ? { background: sw.color, borderColor: sw.accent } : undefined}
+                onClick={() => api.commit(sel.id, { color: sw.color, accent: sw.accent })}
+              >
+                {!sw.color && <Icon.Edit width={12} height={12} />}
+              </button>
+            ))}
+            <label className="title-swatch title-swatch-custom" title="Cor do texto" style={{ background: sel.color || '#888' }}>
+              <input type="color" value={sel.color || '#ffffff'} onChange={(e) => api.commit(sel.id, { color: e.target.value })} />
+            </label>
+            <label className="title-swatch title-swatch-custom" title="Cor de destaque" style={{ background: sel.accent || '#888' }}>
+              <input type="color" value={sel.accent || '#000000'} onChange={(e) => api.commit(sel.id, { accent: e.target.value })} />
+            </label>
+          </div>
+
           <div className="title-times">
             <span className="small muted">Começa em <b>{formatTime(sel.start)}</b></span>
             <button className="link-btn small" onClick={() => api.commit(sel.id, { start: getTime() })}>mover para o cursor</button>

@@ -102,7 +102,7 @@ describe('títulos', () => {
   });
   it('exportação: validação recusa lixo e só gera ValidationError', () => {
     const ok = validateExportJob(job({}, { titles: titlesForExport([{ text: 'Oi', start: 1, duration: 2, style: 'rodape', position: 0.8 }], '9:16') }), g());
-    expect(ok.options.titles).toEqual([{ start: 1, end: 3, lines: ['Oi'], style: 'rodape', position: 0.8 }]);
+    expect(ok.options.titles).toEqual([{ start: 1, end: 3, lines: ['Oi'], style: 'rodape', position: 0.8, color: null, accent: null, anim: 'fade' }]);
     expect(() => validateExportJob(job({}, { titles: [{ start: 2, end: 1, lines: ['x'] }] }), g())).toThrow(ValidationError);
     fc.assert(fc.property(fc.anything(), (titles) => {
       try { validateExportJob(job({}, { titles }), g()); } catch (e) { expect(e).toBeInstanceOf(ValidationError); }
@@ -119,5 +119,35 @@ describe('títulos', () => {
   });
   it('fator da fonte libass/CSS documentado (Montserrat: win ascent+descent)', () => {
     expect(ASS_FONT_EM).toBeCloseTo((1109 + 453) / 1000, 3);
+  });
+  it('cor custom do título vira override no .ass: \\4c3c na caixa (Destaque), \\3c no contorno (Título)', () => {
+    const boxed = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Oi'], style: 'destaque', position: 0.5, color: '#ff0000', accent: '#00ff00' }]);
+    const evBoxed = boxed.split('\n').find((l) => l.startsWith('Dialogue: 1,'));
+    expect(evBoxed).toContain('\\c&H000000FF'); // #ff0000 (RGB) → &HAABBGGRR
+    expect(evBoxed).toContain('\\4c&H0000FF00'); // #00ff00
+    expect(evBoxed).toContain('\\3c&H0000FF00');
+
+    const outlined = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Oi'], style: 'titulo', position: 0.5, accent: '#0000ff' }]);
+    const evOutlined = outlined.split('\n').find((l) => l.startsWith('Dialogue: 1,'));
+    expect(evOutlined).toContain('\\3c&H00FF0000'); // #0000ff
+    expect(evOutlined).not.toMatch(/\\4c/);
+  });
+  it('título sem cor custom não gera override (continua com a cor do estilo)', () => {
+    const ass = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Oi'], style: 'titulo', position: 0.5 }]);
+    const ev = ass.split('\n').find((l) => l.startsWith('Dialogue: 1,'));
+    expect(ev).not.toMatch(/\\c&H|\\3c&H|\\4c&H/);
+  });
+  it('animação "pop" soma escala animada (\\t) ao fade; "fade" (padrão) só tem \\fad', () => {
+    const pop = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Oi'], style: 'titulo', position: 0.5, anim: 'pop' }]);
+    expect(pop).toMatch(/\\fscx72\\fscy72\\t\(0,220,\\fscx100\\fscy100\)/);
+    const fade = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Oi'], style: 'titulo', position: 0.5, anim: 'fade' }]);
+    expect(fade).not.toMatch(/\\t\(/);
+    expect(fade).toMatch(/\\fad\(200,200\)/);
+  });
+  it('cor inválida é recusada na exportação; cor válida passa', () => {
+    expect(() => validateExportJob(job({}, { titles: [{ start: 0, end: 1, lines: ['x'], color: 'javascript:alert(1)' }] }), g())).toThrow(ValidationError);
+    expect(() => validateExportJob(job({}, { titles: [{ start: 0, end: 1, lines: ['x'], accent: '#zzzzzz' }] }), g())).toThrow(ValidationError);
+    const ok = validateExportJob(job({}, { titles: [{ start: 0, end: 1, lines: ['x'], color: '#ABCDEF' }] }), g());
+    expect(ok.options.titles[0].color).toBe('#abcdef');
   });
 });
