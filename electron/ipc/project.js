@@ -4,6 +4,7 @@ const path = require('path');
 const { app, dialog } = require('electron');
 const C = require('../../shared/constants.json');
 const store = require('../services/projectStore');
+const media = require('../services/projectMedia');
 const { assertProjectPath, assertVideoPath, ValidationError } = require('../core/security');
 const { handle } = require('./handle');
 const log = require('../core/logger');
@@ -38,9 +39,11 @@ function register(ctx) {
       if (res.canceled) return null;
       file = assertProjectPath(res.filePaths[0]);
     }
-    const data = grantProjectMedia(store.readProject(file));
+    // acha os vídeos mesmo se a pasta do projeto mudou de lugar ou de computador
+    const { data, missing, relinked } = media.resolveMedia(store.readProject(file), file);
+    grantProjectMedia(data);
     grants.allowProject(file);
-    return { path: file, data };
+    return { path: file, data, missing, relinked };
   });
 
   handle('project:save', async (_e, { data, filePath, saveAs } = {}) => {
@@ -55,7 +58,8 @@ function register(ctx) {
       if (res.canceled) return null;
       file = assertProjectPath(res.filePath.endsWith(`.${C.PROJECT_EXT}`) ? res.filePath : `${res.filePath}.${C.PROJECT_EXT}`);
     }
-    store.writeAtomic(file, { ...data, version: C.PROJECT_VERSION }, true);
+    // grava também o caminho relativo de cada vídeo: o projeto continua abrindo se a pasta mudar
+    store.writeAtomic(file, media.withRelativePaths({ ...data, version: C.PROJECT_VERSION }, file), true);
     grants.allowProject(file);
     return file;
   });
@@ -73,7 +77,11 @@ function register(ctx) {
     try {
       const file = autosavePath();
       const { mtimeMs } = fs.statSync(file);
-      return { savedAt: mtimeMs, data: grantProjectMedia(store.readProject(file)) };
+      const raw = store.readProject(file);
+      let projectFile = null;
+      try { projectFile = raw._path ? assertProjectPath(raw._path) : null; } catch { /* caminho inválido */ }
+      const { data, missing, relinked } = media.resolveMedia(raw, projectFile);
+      return { savedAt: mtimeMs, data: grantProjectMedia(data), missing, relinked };
     } catch {
       return null;
     }

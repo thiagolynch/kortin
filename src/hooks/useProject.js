@@ -4,11 +4,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { emptyDocument } from '../state/document';
 import { DEFAULT_CAPTIONS } from '../lib/captions';
-import { ASPECTS, FITS, baseName, cleanError, restoreClips, serializeProject } from '../lib/timeline';
+import {
+  ASPECTS, FITS, baseName, cleanError, durationMismatches, remapProjectPaths, restoreClips, serializeProject,
+} from '../lib/timeline';
 
 const AUTOSAVE_DELAY = 1500;
 
-export function useProject({ docApi, library, player, notify, onLoaded }) {
+export function useProject({ docApi, library, player, notify, onLoaded, askRelink }) {
   const { doc, ops } = docApi;
   const [projectPath, setProjectPath] = useState(null);
   const [savedDoc, setSavedDoc] = useState(doc);
@@ -34,11 +36,29 @@ export function useProject({ docApi, library, player, notify, onLoaded }) {
     [dirty]
   );
 
-  const loadProject = useCallback(async (data, path, { recovered = false } = {}) => {
+  /**
+   * Abre um projeto já lido pelo processo principal. `missing` = vídeos que ele não achou nem pelo
+   * caminho relativo: o usuário pode relocalizá-los antes (ou desistir: devolve false).
+   */
+  const loadProject = useCallback(async (input, path, { recovered = false, missing = [], relinked = 0 } = {}) => {
+    let data = input;
+    let notifyLater = '';
+    if (missing.length) {
+      const map = await askRelink(missing);
+      if (!map) return false; // cancelou
+      data = remapProjectPaths(data, map);
+      // os que o usuário decidiu deixar de fora nem são lidos
+      const left = new Set(missing.map((m) => m.path).filter((p) => !map[p]));
+      if (left.size) {
+        data = { ...data, clips: data.clips.filter((c) => !left.has(c.path)) };
+        notifyLater = `${left.size} vídeo(s) ficaram de fora.`;
+      }
+    }
     player.pause();
     const paths = [...new Set(data.clips.map((c) => c.path))];
     const { ok, errors } = await library.probeAll(paths);
     const infoByPath = Object.fromEntries(ok.map((i) => [i.path, i]));
+    const different = durationMismatches(data.clips, infoByPath);
     const next = {
       clips: restoreClips(data.clips, infoByPath),
       aspect: ASPECTS[data.aspect] ? data.aspect : '9:16',
@@ -53,11 +73,17 @@ export function useProject({ docApi, library, player, notify, onLoaded }) {
     player.seek(0);
     onLoaded(next);
     if (errors.length) {
-      notify(`${errors.length} vídeo(s) não foram encontrados e ficaram de fora: ${errors.map((e) => baseName(e.path)).join(', ')}`);
+      notify(`${errors.length} vídeo(s) ficaram de fora: ${errors.map((e) => baseName(e.path)).join(', ')}`);
+    } else if (different.length) {
+      notify(`Atenção: ${different.map(baseName).join(', ')} tem duração diferente da salva. Confira se é o mesmo vídeo.`);
+    } else if (notifyLater) {
+      notify(notifyLater);
     } else {
-      notify(recovered ? 'Projeto recuperado.' : `Projeto "${baseName(path)}" aberto.`);
+      const moved = relinked ? ` ${relinked} vídeo(s) foram achados no novo local.` : '';
+      notify(`${recovered ? 'Projeto recuperado.' : `Projeto "${baseName(path)}" aberto.`}${moved}`);
     }
-  }, [library, notify, onLoaded, ops, player]);
+    return true;
+  }, [askRelink, library, notify, onLoaded, ops, player]);
 
   const openProject = useCallback(async (filePath) => {
     if (!confirmDiscard()) return;
@@ -65,7 +91,7 @@ export function useProject({ docApi, library, player, notify, onLoaded }) {
       const res = await window.kortin.openProject(filePath);
       if (res) {
         setRecovery(null);
-        await loadProject(res.data, res.path);
+        await loadProject(res.data, res.path, { missing: res.missing || [], relinked: res.relinked || 0 });
       }
     } catch (err) {
       notify(`Não foi possível abrir o projeto: ${cleanError(err)}`);
@@ -102,7 +128,7 @@ export function useProject({ docApi, library, player, notify, onLoaded }) {
   const recover = useCallback(() => {
     const r = recovery;
     setRecovery(null);
-    if (r) loadProject(r.data, null, { recovered: true });
+    if (r) loadProject(r.data, null, { recovered: true, missing: r.missing || [], relinked: r.relinked || 0 });
   }, [loadProject, recovery]);
 
   const discardRecovery = useCallback(() => {

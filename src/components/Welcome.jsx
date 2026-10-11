@@ -42,7 +42,10 @@ export default function Welcome({ aspect, version, onDone }) {
           <button className="btn ghost" onClick={() => onDone(choice, false)}>Explorar primeiro</button>
           <button className="btn primary" onClick={() => onDone(choice, true)}>Importar meus vídeos</button>
         </div>
-        {version && <p className="muted small center">Versão {version}</p>}
+        <p className="muted small center">
+          {version && <>Versão {version} · </>}
+          <button className="link-btn" onClick={() => window.kortin.openLicenses()}>Licenças de terceiros</button>
+        </p>
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import ExportQueue from './components/ExportQueue';
 import Welcome from './components/Welcome';
 import CaptionsPanel from './components/CaptionsPanel';
 import RecoveryBanner from './components/RecoveryBanner';
+import RelinkDialog from './components/RelinkDialog';
 import { PlayButton, Timecode } from './components/Transport';
 import { Icon, Logo } from './components/Icons';
 import { MAX_CHARS, deriveCues, editCue } from './lib/captions';
@@ -90,7 +91,10 @@ function Editor() {
   const selectedSegment = useMemo(() => segments.find((s) => s.clip.id === selectedId) || null, [segments, selectedId]);
 
   const onLoaded = useCallback((next) => setSelectedId(next.clips[0]?.id || null), []);
-  const project = useProject({ docApi, library, player, notify, onLoaded });
+  // "Arquivos não encontrados": o hook espera a resposta do diálogo (mapa de caminhos ou null)
+  const [relink, setRelink] = useState(null);
+  const askRelink = useCallback((missing) => new Promise((resolve) => setRelink({ missing, resolve })), []);
+  const project = useProject({ docApi, library, player, notify, onLoaded, askRelink });
 
   // ---------- Importação ----------
   const importPaths = useCallback(async (paths) => {
@@ -258,7 +262,7 @@ function Editor() {
     remove: removeSelected,
     step: (delta) => { player.pause(); player.seek(player.getTime() + delta); },
     seek: player.seek,
-  }, !exporting && !welcome);
+  }, !exporting && !welcome && !relink);
 
   // ---------- Arrastar arquivos para a janela ----------
   const onWindowDragOver = (e) => {
@@ -441,6 +445,13 @@ function Editor() {
           captionSettings={captionSettings}
           onQueue={exportQueue.enqueue}
           onClose={() => setExporting(false)}
+        />
+      )}
+      {relink && (
+        <RelinkDialog
+          missing={relink.missing}
+          onDone={(map) => { relink.resolve(map); setRelink(null); }}
+          onCancel={() => { relink.resolve(null); setRelink(null); }}
         />
       )}
       {welcome && <Welcome aspect={aspect} version={version} onDone={finishWelcome} />}

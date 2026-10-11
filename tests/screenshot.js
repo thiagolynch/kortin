@@ -8,7 +8,8 @@ const fs = require('fs');
 const electron = require('electron');
 const { app, BrowserWindow, dialog } = electron;
 
-const mode = process.argv.includes('recuperar') ? 'recuperar' : process.argv.includes('legenda') ? 'legenda' : 'editar';
+const MODES = ['recuperar', 'legenda', 'mover', 'editar'];
+const mode = MODES.find((m) => process.argv.includes(m)) || 'editar';
 const outDir = process.argv[process.argv.length - 1];
 const tmp = path.join(__dirname, 'tmp');
 const exportDir = path.join(tmp, 'exportados');
@@ -21,6 +22,23 @@ if (mode === 'editar' || mode === 'legenda') {
   // a janela de "escolher pasta" é do Windows; no teste ela responde sozinha
   dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [exportDir] });
   dialog.showSaveDialog = async (_w, o) => ({ canceled: false, filePath: path.join(exportDir, path.basename((o || _w).defaultPath)) });
+}
+
+// "mover": projeto salvo em outro PC — os caminhos absolutos não existem mais aqui
+if (mode === 'mover') {
+  fs.mkdirSync(path.join(tmp, 'projetos'), { recursive: true });
+  const proj = path.join(tmp, 'projetos', 'projeto-movido.kortin'); // vídeos fora da pasta do projeto
+  const gone = process.platform === 'win32' ? 'D:\\Outro PC\\Videos' : '/outro-pc/videos';
+  fs.writeFileSync(proj, JSON.stringify({
+    app: 'kortin', version: 4, aspect: '9:16', fit: 'blur',
+    clips: [
+      { id: 'a', path: path.join(gone, 'horizontal.mp4'), name: 'horizontal.mp4', duration: 6, inPoint: 0, outPoint: 3, speed: 1, volume: 1 },
+      { id: 'b', path: path.join(gone, 'vertical-sem-audio.mp4'), name: 'vertical-sem-audio.mp4', duration: 4, inPoint: 0, outPoint: 4, speed: 1, volume: 1 },
+      { id: 'c', path: path.join(gone, 'nao-existe.mp4'), name: 'nao-existe.mp4', duration: 9, inPoint: 0, outPoint: 2, speed: 1, volume: 1 },
+    ],
+  }));
+  process.argv.push(proj);
+  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [tmp] }); // "Procurar numa pasta" → tests/tmp
 }
 
 require('../electron/main.js');
@@ -199,6 +217,20 @@ app.whenReady().then(async () => {
     }
     await wait(500);
     console.log('exportados:', fs.readdirSync(exportDir).join(', '));
+  } else if (mode === 'mover') {
+    await js(`document.querySelector('.welcome') && [...document.querySelectorAll('.welcome button')].find(b => b.textContent.includes('Explorar')).click(); await wait(300);`);
+    const before = await js(`return { dialog: !!document.querySelector('.relink'), items: [...document.querySelectorAll('.relink-list strong')].map(x => x.textContent) };`);
+    console.log('diálogo:', JSON.stringify(before));
+    await shot(win, 'kortin-arquivos-nao-encontrados');
+    await click('.relink .btn', 'Procurar');
+    await wait(800);
+    const mid = await js(`return { note: document.querySelector('.relink-note')?.textContent, action: document.querySelector('.relink .modal-actions .btn.primary').textContent };`);
+    console.log('após procurar:', JSON.stringify(mid));
+    await shot(win, 'kortin-arquivos-encontrados');
+    await click('.relink .modal-actions .btn.primary');
+    await wait(2500);
+    const after = await js(`return { clips: document.querySelectorAll('.tl-clip').length, toast: document.querySelector('.toast')?.innerText };`);
+    console.log('projeto aberto:', JSON.stringify(after));
   } else {
     const banner = await js(`return document.querySelector('.recovery')?.innerText || null;`);
     console.log('banner:', JSON.stringify(banner));

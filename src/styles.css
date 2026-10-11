@@ -464,3 +464,13 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .crash p { color: var(--muted); margin: 0; }
 .crash .error-box { text-align: left; max-height: 160px; overflow: auto; }
 .crash .btn { justify-self: center; }
+
+/* ---------- v0.5: arquivos não encontrados ---------- */
+.modal.relink { width: 540px; }
+.relink-list { list-style: none; margin: 14px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: auto; }
+.relink-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
+.relink-list li.ok { border-color: #34d39955; }
+.relink-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.relink-info strong, .relink-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.relink-list li.ok small { color: #6ee7b7; }
+.relink-note { margin: 8px 0 0; }

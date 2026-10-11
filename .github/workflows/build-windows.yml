@@ -69,6 +69,15 @@ jobs:
       - name: Testar o motor de vídeo
         run: npm run test:engine
 
+      - name: Reaproveitar os modelos já conferidos
+        uses: actions/cache@v4
+        with:
+          path: vendor-src/models-verify
+          key: models-${{ hashFiles('electron/services/stt/transcribe.js') }}
+
+      - name: Conferir SHA-256 dos modelos de IA contra o servidor
+        run: npm run verify:models
+
       - name: Testar a legenda de ponta a ponta
         run: npm run test:whisper
 

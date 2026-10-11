@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('kortin', {
     }
   },
   authorizeFiles: (paths) => ipcRenderer.invoke('files:authorize', paths),
+  locateMedia: (name) => ipcRenderer.invoke('media:locate', name),
+  searchMediaFolder: (names) => ipcRenderer.invoke('media:searchFolder', names),
 
   // legenda automática
   captionsStatus: () => ipcRenderer.invoke('captions:status'),
@@ -55,4 +57,5 @@ contextBridge.exposeInMainWorld('kortin', {
   version: () => ipcRenderer.invoke('app:version'),
   onUpdateReady: listen('update:ready'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
+  openLicenses: () => ipcRenderer.invoke('app:openLicenses'),
 });

@@ -159,8 +159,9 @@ export function serializeProject({ clips, aspect, fit, captions, transcripts }) 
     version: PROJECT_VERSION,
     aspect,
     fit,
-    clips: clips.map(({ id, path, name, inPoint, outPoint, volume, speed, fadeIn, fadeOut, denoise }) => ({
-      id, path, name, inPoint, outPoint,
+    // duration: para conferir, ao reabrir em outro lugar, se o vídeo achado é o mesmo
+    clips: clips.map(({ id, path, name, duration, inPoint, outPoint, volume, speed, fadeIn, fadeOut, denoise }) => ({
+      id, path, name, duration, inPoint, outPoint,
       volume: volume ?? 1, speed: speed ?? 1, fadeIn: fadeIn ?? 0, fadeOut: fadeOut ?? 0, denoise: !!denoise,
     })),
     ...(captions ? { captions } : {}),
@@ -169,6 +170,29 @@ export function serializeProject({ clips, aspect, fit, captions, transcripts }) 
       ? { transcripts: Object.fromEntries(Object.entries(transcripts).filter(([p]) => used.has(p))) }
       : {}),
   };
+}
+
+/** Troca caminhos de vídeo (clipes e transcrições) depois que o usuário relocalizou arquivos. */
+export function remapProjectPaths(data, map) {
+  const has = (p) => Object.prototype.hasOwnProperty.call(map, p);
+  if (!data.clips.some((c) => has(c.path))) return data;
+  return {
+    ...data,
+    clips: data.clips.map((c) => (has(c.path) ? { ...c, path: map[c.path] } : c)),
+    transcripts: data.transcripts
+      ? Object.fromEntries(Object.entries(data.transcripts).map(([p, t]) => [has(p) ? map[p] : p, t]))
+      : data.transcripts,
+  };
+}
+
+/** Vídeos achados cuja duração não bate com a salva no projeto (provavelmente outro arquivo com o mesmo nome) */
+export function durationMismatches(savedClips, infoByPath, tolerance = 0.5) {
+  const out = new Set();
+  for (const c of savedClips) {
+    const info = infoByPath[c.path];
+    if (info && c.duration && Math.abs(info.duration - c.duration) > tolerance) out.add(c.path);
+  }
+  return [...out];
 }
 
 /** Reconstrói os clipes a partir do arquivo, usando as informações lidas de cada vídeo */

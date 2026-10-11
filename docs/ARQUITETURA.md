@@ -31,6 +31,9 @@ shared/constants.json — limites e listas usados pelos dois lados
 4. **O cursor não re-renderiza a árvore.** Componentes leem com `usePlayhead(store, seletor)` e o seletor devolve primitivo.
 5. **Exportação com memória limitada.** Acima de 16 clipes, renderiza em partes e emenda (concat demuxer). Durações são arredondadas em quadros na timeline inteira (sem deriva de legenda).
 6. **Gravação atômica.** Projeto e vídeo vão para arquivo temporário e só são renomeados no fim.
+7. **Projetos portáteis.** O `.kortin` guarda caminho absoluto + relativo de cada vídeo. Ao abrir: absoluto → relativo → mesmo nome na pasta do projeto → diálogo "Arquivos não encontrados" (localizar ou procurar numa pasta, busca limitada).
+8. **Cache em disco** (`services/mediaCache.js`): leitura, miniatura e onda sonora por caminho+tamanho+data, LRU de 200 MB.
+9. **Modelos de IA íntegros.** URL em revisão fixa do Hugging Face + tamanho e SHA-256 no código; conferido no download e antes do primeiro uso; o CI confere os hashes contra o servidor (`npm run verify:models`).
 
 ## Testes
 
@@ -39,4 +42,5 @@ shared/constants.json — limites e listas usados pelos dois lados
 | Unidade + propriedade | `npm run test:unit` | timeline, legendas, reducer, validadores (fuzz), parseProbe, Range, ASS, migração |
 | Integração | `npm run test:engine` | exportação real com FFmpeg: formatos, áudio, legendas, 160 clipes, Unicode, cancelamento |
 | IA | `npm run test:whisper` | whisper.cpp real com modelo tiny |
-| Interface | `npx electron tests/screenshot.js editar\|legenda\|recuperar <pasta>` | roteiro na UI + prints |
+| Interface | `npx electron tests/screenshot.js editar\|legenda\|recuperar\|mover <pasta>` | roteiro na UI + prints |
+| Modelos | `npm run verify:models` | SHA-256 fixados conferem com o Hugging Face |
