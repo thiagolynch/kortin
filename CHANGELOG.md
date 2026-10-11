@@ -3,6 +3,17 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.4] — 2026-10-11
+
+### Títulos: inspirado em reels, 3 melhorias de tipografia
+- **Título + subtítulo**: liga em qualquer estilo de título (opção "Primeira linha maior"). A 1ª linha fica no tamanho normal do estilo e as linhas seguintes encolhem — igual ao "manchete grande + texto menor" comum em reels/posts.
+- **Novo estilo "Sublinhado"**: texto puro (sem caixa de fundo), com um traço embaixo, pensado para citações/legendas curtas de destaque.
+- **Espaçamento entre letras diferente por estilo** (Título, Destaque, Rodapé, Sublinhado) — cada um com sua própria "assinatura" tipográfica, mesmo usando a mesma fonte (Montserrat).
+
+**Limitação honesta**: o Kortin só empacota duas variações de uma única fonte (Montserrat ExtraBold e Bold — ambas licença SIL OFL, ver `licenses/`). "Fonte diferente por estilo" aqui significa variar o espaçamento entre letras e o peso (ExtraBold/Bold) dessas duas variações — não é possível adicionar tipografias totalmente novas sem aumentar o instalador e revisar licenças.
+
+A prévia mostra exatamente o mesmo resultado (tamanhos, sublinhado e espaçamento) que vai para o vídeo exportado.
+
 ## [0.7.3] — 2026-10-11
 
 ### Polimento de interface

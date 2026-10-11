@@ -173,6 +173,7 @@ function validateTitles(titles) {
       color: hexOrNull(t.color ?? null),
       accent: hexOrNull(t.accent ?? null),
       anim: oneOf(t.anim ?? 'fade', C.TITLE_ANIMS, 'animação do título'),
+      headline: !!t.headline,
     };
   });
 }

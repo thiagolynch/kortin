@@ -192,7 +192,8 @@
   "TITLE_STYLES": [
     "titulo",
     "destaque",
-    "rodape"
+    "rodape",
+    "sublinhado"
   ],
   "TITLE_ANIMS": [
     "fade",

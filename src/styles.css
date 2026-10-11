@@ -561,10 +561,16 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .title-overlay span { display: inline-block; padding: 0 var(--pad); white-space: nowrap; } /* as linhas já vêm quebradas: iguais à exportação */
 .title-overlay.selected { outline: 1px dashed #ffffff88; outline-offset: 4px; border-radius: 4px; }
 /* --title-color / --title-accent: cor custom do título (opcional); sem elas, cada estilo usa seu padrão. */
-.title-titulo { color: var(--title-color, #fff); font-weight: 800; text-shadow: 0 0 .06em var(--title-accent, #000), 0 0 .06em var(--title-accent, #000), .03em .04em 0 #0008; }
-.title-destaque span { color: var(--title-color, #111); background: var(--title-accent, #ffe14d); font-weight: 800; padding: calc(var(--pad) * .55) var(--pad); }
-.title-rodape span { color: var(--title-color, #fff); background: var(--title-accent, #0b0d12bf); font-weight: 700; padding: calc(var(--pad) * .55) var(--pad); }
+.title-titulo { color: var(--title-color, #fff); font-weight: 800; letter-spacing: 0; text-shadow: 0 0 .06em var(--title-accent, #000), 0 0 .06em var(--title-accent, #000), .03em .04em 0 #0008; }
+.title-destaque span { color: var(--title-color, #111); background: var(--title-accent, #ffe14d); font-weight: 800; letter-spacing: .03em; padding: calc(var(--pad) * .55) var(--pad); }
+.title-rodape span { color: var(--title-color, #fff); background: var(--title-accent, #0b0d12bf); font-weight: 700; letter-spacing: .015em; padding: calc(var(--pad) * .55) var(--pad); }
 .title-overlay.title-destaque, .title-overlay.title-rodape { gap: 0; }
+/* Sublinhado: texto puro (sem caixa), com um traço embaixo — igual ao \u1 nativo do libass */
+.title-sublinhado { color: var(--title-color, #fff); font-weight: 800; letter-spacing: -.01em; text-decoration: underline; text-decoration-thickness: .06em; text-underline-offset: .12em; text-shadow: 0 0 .05em var(--title-accent, #000), .02em .03em 0 #0008; }
+/* Título + subtítulo: a 1ª linha fica no tamanho do estilo, as seguintes encolhem (--headline-sub-scale, igual ao \fs da exportação) */
+.title-overlay.title-headline span:not(:first-child) { opacity: .92; }
+.title-headline-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted, #9aa3b2); margin: 2px 0 6px; cursor: pointer; }
+.title-headline-toggle input { accent-color: var(--accent, #6b6bff); }
 @keyframes title-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes title-pop { from { opacity: 0; transform: translateY(-50%) scale(.7); } to { opacity: 1; transform: translateY(-50%) scale(1); } }
 

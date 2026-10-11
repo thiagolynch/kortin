@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { useDerivedPlayhead } from '../state/playhead';
-import { TITLE_STYLES, activeTitleKey, titleLines } from '../lib/titles';
+import { TITLE_STYLES, activeTitleKey, titleLines, HEADLINE_SUB_SCALE } from '../lib/titles';
 import { ASS_FONT_EM } from '../lib/captions';
 
 /**
@@ -15,18 +15,21 @@ function TitleOverlay({ titles, aspect, store, width, height, selectedId, onSele
   return titles.filter((t) => ids.has(t.id)).map((t) => {
     const assSize = TITLE_STYLES[t.style].size * base; // o tamanho que vai no .ass
     const fs = assSize / ASS_FONT_EM;
+    const lines = titleLines(t, aspect);
+    const isHeadline = t.headline && lines.length > 1;
     return (
       <div
         key={t.id}
-        className={`title-overlay title-${t.style} title-anim-${t.anim === 'pop' ? 'pop' : 'fade'}${t.id === selectedId ? ' selected' : ''}`}
+        className={`title-overlay title-${t.style} title-anim-${t.anim === 'pop' ? 'pop' : 'fade'}${t.id === selectedId ? ' selected' : ''}${isHeadline ? ' title-headline' : ''}`}
         style={{
           top: `${t.position * 100}%`, fontSize: fs, '--pad': `${Math.max(2, assSize * (t.style === 'rodape' ? 0.45 : 0.35))}px`,
+          '--headline-sub-scale': HEADLINE_SUB_SCALE,
           ...(t.color ? { '--title-color': t.color } : {}),
           ...(t.accent ? { '--title-accent': t.accent } : {}),
         }}
         onClick={() => onSelect(t.id)}
       >
-        {titleLines(t, aspect).map((line, i) => <span key={i}>{line}</span>)}
+        {lines.map((line, i) => <span key={i} style={isHeadline && i > 0 ? { fontSize: `calc(1em * var(--headline-sub-scale))` } : undefined}>{line}</span>)}
       </div>
     );
   });
