@@ -1,4 +1,4 @@
-Kortin 0.7.0 — Avisos de componentes de terceiros
+Kortin 0.7.5 — Avisos de componentes de terceiros
 ==============================================================================
 
 FFmpeg
@@ -29,9 +29,14 @@ Os modelos de IA (ggml-*.bin) são baixados sob demanda do repositório oficial 
 
 ==============================================================================
 
-Montserrat (fonte das legendas)
--------------------------------
-Copyright 2011 The Montserrat Project Authors — SIL Open Font License 1.1 (Montserrat-OFL.txt).
+Fontes das legendas e títulos
+------------------------------
+Todas sob SIL Open Font License 1.1, do catálogo do Google Fonts (fonts.google.com):
+
+Montserrat — Copyright 2011 The Montserrat Project Authors (Montserrat-OFL.txt).
+Anton — Copyright 2020 The Anton Project Authors (Anton-OFL.txt).
+Bebas Neue — Copyright 2010 Dharma Type (BebasNeue-OFL.txt).
+Archivo Black — Copyright 2017 The Archivo Black Project Authors (ArchivoBlack-OFL.txt).
 
 ==============================================================================
 

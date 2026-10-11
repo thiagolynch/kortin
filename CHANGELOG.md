@@ -3,6 +3,14 @@
 Todas as mudanças relevantes, da mais nova para a mais antiga.
 Cada versão publicada em [Releases](https://github.com/thiagolynch/kortin/releases) usa o texto da sua seção.
 
+## [0.7.6] — 2026-10-11
+
+### Tipografia dos títulos: fontes novas, não só pesos da Montserrat
+- **3 fontes de exibição novas**, empacotadas no instalador (Google Fonts, SIL OFL 1.1 — mesma licença da Montserrat): **Anton** (título principal), **Archivo Black** (destaque em caixa) e **Bebas Neue** (sublinhado).
+- Cada estilo de título agora tem uma fonte própria de verdade, não só um ajuste de espaçamento entre letras na mesma fonte — o problema real apontado: a variedade visual anterior era pouca pra um app de vídeo curto.
+- **Sublinhado mais chamativo**: ganhou um brilho leve (`\blur` no .ass / `text-shadow` na prévia) além do traço, pra destacar mais na tela.
+- Tamanhos recalibrados por fonte (cada uma tem proporções diferentes de altura) para manter "prévia = exportação".
+
 ## [0.7.5] — 2026-10-11
 
 ### Melhores momentos (shorts para TikTok, Reels e YouTube Shorts)

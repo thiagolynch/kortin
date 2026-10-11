@@ -157,13 +157,26 @@ describe('títulos', () => {
     const outros = ['titulo', 'destaque', 'rodape'].map((n) => ass.split('\n').find((l) => l.startsWith(`Style: T_${n},`)));
     for (const l of outros) expect(l.split(',')[9]).toBe('0');
   });
-  it('cada preset de título tem seu próprio "Spacing" (identidade tipográfica sem fonte nova)', () => {
+  it('cada preset de título usa sua própria fonte e espaçamento (v0.7.6: fontes de exibição, não só pesos da Montserrat)', () => {
     const ass = buildAss([], { style: 'classica' }, 1080, 1920, []);
-    const spacing = (name) => Number(ass.split('\n').find((l) => l.startsWith(`Style: T_${name},`)).split(',')[13]);
-    expect(spacing('titulo')).toBe(0);
-    expect(spacing('destaque')).toBe(0.6);
-    expect(spacing('rodape')).toBe(0.3);
-    expect(spacing('sublinhado')).toBe(-0.3);
+    const styleLine = (name) => ass.split('\n').find((l) => l.startsWith(`Style: T_${name},`)).split(',');
+    const font = (name) => styleLine(name)[1];
+    const spacing = (name) => Number(styleLine(name)[13]);
+    expect(font('titulo')).toBe('Anton');
+    expect(font('destaque')).toBe('Archivo Black');
+    expect(font('rodape')).toBe('Montserrat');
+    expect(font('sublinhado')).toBe('Bebas Neue');
+    // fontes diferentes já dão identidade própria; o espaçamento é um ajuste fino, não precisa variar muito
+    expect(spacing('titulo')).toBeCloseTo(0.2, 5);
+    expect(spacing('destaque')).toBeCloseTo(0.3, 5);
+    expect(spacing('rodape')).toBeCloseTo(0.3, 5);
+    expect(spacing('sublinhado')).toBeCloseTo(0.4, 5);
+  });
+  it('estilo "sublinhado" tem um brilho (\\blur) para ficar mais chamativo; os outros não', () => {
+    const ass = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Oi'], style: 'sublinhado', position: 0.5 }]);
+    expect(ass).toMatch(/\\blur2\.5/);
+    const titulo = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Oi'], style: 'titulo', position: 0.5 }]);
+    expect(titulo).not.toMatch(/\\blur/);
   });
   it('"headline" (título + subtítulo) gera \\fs por linha, maior na 1ª e menor nas seguintes', () => {
     const ass = buildAss([], { style: 'classica' }, 1080, 1920, [

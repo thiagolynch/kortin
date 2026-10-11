@@ -37,9 +37,14 @@ Os modelos de IA (ggml-*.bin) são baixados sob demanda do repositório oficial 
 (https://huggingface.co/ggerganov/whisper.cpp) e derivam dos modelos Whisper da OpenAI (MIT).
 `, hr, '');
 
-out.push(`Montserrat (fonte das legendas)
--------------------------------
-Copyright 2011 The Montserrat Project Authors — SIL Open Font License 1.1 (Montserrat-OFL.txt).
+out.push(`Fontes das legendas e títulos
+------------------------------
+Todas sob SIL Open Font License 1.1, do catálogo do Google Fonts (fonts.google.com):
+
+Montserrat — Copyright 2011 The Montserrat Project Authors (Montserrat-OFL.txt).
+Anton — Copyright 2020 The Anton Project Authors (Anton-OFL.txt).
+Bebas Neue — Copyright 2010 Dharma Type (BebasNeue-OFL.txt).
+Archivo Black — Copyright 2017 The Archivo Black Project Authors (ArchivoBlack-OFL.txt).
 `, hr, '');
 
 out.push(`Electron e Chromium
@@ -68,4 +73,4 @@ for (const dir of [...bundled, ...listed]) {
 }
 
 writeFileSync(join(root, 'licenses', 'AVISOS-DE-TERCEIROS.txt'), `${out.join('\n')}\n`, 'utf8');
-console.log(`Avisos gerados: ${seen.size} pacotes JavaScript + FFmpeg, whisper.cpp, Montserrat, Electron.`);
+console.log(`Avisos gerados: ${seen.size} pacotes JavaScript + FFmpeg, whisper.cpp, fontes (Montserrat/Anton/Bebas Neue/Archivo Black), Electron.`);

@@ -18,14 +18,16 @@ const PRESETS = {
 const SIZES = { p: 0.8, m: 1, g: 1.25 };
 
 // Títulos (camada de texto livre). Mesmos nomes e cores da prévia (TitleOverlay).
-// "spacing" (espaçamento entre letras) varia por estilo: é o jeito mais simples de dar uma
-// identidade tipográfica própria a cada um sem precisar de mais arquivos de fonte (só temos as
-// duas variações da Montserrat — ExtraBold e Bold — empacotadas no instalador).
+// Cada estilo usa uma fonte de exibição própria (não só peso/espaçamento da Montserrat) — o jeito
+// comum de legenda de reels/shorts usa fontes bem gordas e cheias de caráter, então empacotamos
+// 3 fontes extras do Google Fonts (SIL OFL 1.1, mesma licença da Montserrat): Anton (impacto, para
+// o título principal), Archivo Black (bold limpa, para a caixa de destaque) e Bebas Neue
+// (condensada, para o sublinhado — "blur" dá um leve brilho que chama mais atenção).
 const TITLE_PRESETS = {
-  titulo: { font: 'Montserrat ExtraBold', bold: false, size: 0.085, primary: 'FFFFFF', outline: '000000', bord: 0.06, shadow: 3, spacing: 0 },
-  destaque: { font: 'Montserrat ExtraBold', bold: false, size: 0.055, primary: '111111', box: 'FFE14D', boxAlpha: 0x00, bord: 0.35, spacing: 0.6 },
+  titulo: { font: 'Anton', bold: false, size: 0.078, primary: 'FFFFFF', outline: '000000', bord: 0.065, shadow: 3, spacing: 0.2 },
+  destaque: { font: 'Archivo Black', bold: false, size: 0.05, primary: '111111', box: 'FFE14D', boxAlpha: 0x00, bord: 0.35, spacing: 0.3 },
   rodape: { font: 'Montserrat', bold: true, size: 0.036, primary: 'FFFFFF', box: '0B0D12', boxAlpha: 0x40, bord: 0.45, spacing: 0.3 },
-  sublinhado: { font: 'Montserrat ExtraBold', bold: false, size: 0.06, primary: 'FFFFFF', outline: '000000', bord: 0.025, shadow: 0, spacing: -0.3, underline: true },
+  sublinhado: { font: 'Bebas Neue', bold: false, size: 0.068, primary: 'FFFFFF', outline: '000000', bord: 0.03, shadow: 0, spacing: 0.4, underline: true, blur: 2.5 },
 };
 const TITLE_FADE_MS = 200;
 const HEADLINE_SUB_SCALE = 0.62; // tamanho das linhas depois da 1ª, quando "título + subtítulo" está ligado
@@ -105,7 +107,8 @@ function titleEvents(titles, W, H) {
       } else {
         text = t.lines.map(escapeText).join('\\N');
       }
-      const override = `\\an5\\pos(${x},${y})${titleColorOverride(t, preset)}${titleAnimTag(t)}`;
+      const glow = preset.blur ? `\\blur${preset.blur}` : '';
+      const override = `\\an5\\pos(${x},${y})${glow}${titleColorOverride(t, preset)}${titleAnimTag(t)}`;
       // camada 1: títulos ficam por cima da legenda
       return `Dialogue: 1,${assTime(t.start)},${assTime(t.end)},T_${t.style},,0,0,0,,{${override}}${text}`;
     });
