@@ -7,10 +7,13 @@ export const TITLE_STYLES = {
   titulo: { label: 'Título', size: 0.085, position: 0.45 },
   destaque: { label: 'Destaque', size: 0.055, position: 0.3 },
   rodape: { label: 'Rodapé', size: 0.036, position: 0.82 },
+  sublinhado: { label: 'Sublinhado', size: 0.06, position: 0.3 },
 };
 
 export const TITLE_LIMITS = { minDuration: 0.5, maxDuration: 15, maxLines: C.LIMITS.maxTitleLines, maxChars: C.LIMITS.maxTitleChars };
 export const TITLE_ANIMS = { fade: 'Aparece', pop: 'Salta' };
+// Tamanho das linhas depois da 1ª quando "título + subtítulo" está ligado — mesmo valor usado no .ass (ass.js)
+export const HEADLINE_SUB_SCALE = 0.62;
 
 // Combinações de cor prontas (texto + destaque) para não depender só do seletor nativo do navegador.
 export const TITLE_SWATCHES = [
@@ -27,16 +30,16 @@ export const sanitizeHex = (v) => (typeof v === 'string' && HEX.test(v) ? v.toLo
 
 // Caracteres por linha por formato (vertical cabe menos)
 const CHARS = {
-  '9:16': { titulo: 14, destaque: 20, rodape: 30 },
-  '4:5': { titulo: 16, destaque: 22, rodape: 32 },
-  '1:1': { titulo: 18, destaque: 24, rodape: 36 },
-  '16:9': { titulo: 26, destaque: 34, rodape: 52 },
+  '9:16': { titulo: 14, destaque: 20, rodape: 30, sublinhado: 19 },
+  '4:5': { titulo: 16, destaque: 22, rodape: 32, sublinhado: 21 },
+  '1:1': { titulo: 18, destaque: 24, rodape: 36, sublinhado: 23 },
+  '16:9': { titulo: 26, destaque: 34, rodape: 52, sublinhado: 33 },
 };
 
 export function newTitle(at = 0, style = 'titulo') {
   return {
     id: uid(), text: 'Seu título aqui', start: Math.max(0, at), duration: 3, style,
-    position: TITLE_STYLES[style].position, color: null, accent: null, anim: 'pop',
+    position: TITLE_STYLES[style].position, color: null, accent: null, anim: 'pop', headline: false,
   };
 }
 
@@ -77,15 +80,16 @@ export function sanitizeTitles(list) {
       color: sanitizeHex(t.color),
       accent: sanitizeHex(t.accent),
       anim: C.TITLE_ANIMS.includes(t.anim) ? t.anim : 'fade',
+      headline: !!t.headline,
     }));
 }
 
-/** O que vai para a exportação: tempo, linhas prontas, estilo, altura, cor e animação. */
+/** O que vai para a exportação: tempo, linhas prontas, estilo, altura, cor, animação e destaque da 1ª linha. */
 export function titlesForExport(titles, aspect) {
   return titles
     .map((t) => ({
       start: t.start, end: t.start + t.duration, lines: titleLines(t, aspect), style: t.style, position: t.position,
-      color: t.color, accent: t.accent, anim: t.anim,
+      color: t.color, accent: t.accent, anim: t.anim, headline: t.headline,
     }))
     .filter((t) => t.lines.length);
 }

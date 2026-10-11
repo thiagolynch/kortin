@@ -18,12 +18,17 @@ const PRESETS = {
 const SIZES = { p: 0.8, m: 1, g: 1.25 };
 
 // Títulos (camada de texto livre). Mesmos nomes e cores da prévia (TitleOverlay).
+// "spacing" (espaçamento entre letras) varia por estilo: é o jeito mais simples de dar uma
+// identidade tipográfica própria a cada um sem precisar de mais arquivos de fonte (só temos as
+// duas variações da Montserrat — ExtraBold e Bold — empacotadas no instalador).
 const TITLE_PRESETS = {
-  titulo: { font: 'Montserrat ExtraBold', bold: false, size: 0.085, primary: 'FFFFFF', outline: '000000', bord: 0.06, shadow: 3 },
-  destaque: { font: 'Montserrat ExtraBold', bold: false, size: 0.055, primary: '111111', box: 'FFE14D', boxAlpha: 0x00, bord: 0.35 },
-  rodape: { font: 'Montserrat', bold: true, size: 0.036, primary: 'FFFFFF', box: '0B0D12', boxAlpha: 0x40, bord: 0.45 },
+  titulo: { font: 'Montserrat ExtraBold', bold: false, size: 0.085, primary: 'FFFFFF', outline: '000000', bord: 0.06, shadow: 3, spacing: 0 },
+  destaque: { font: 'Montserrat ExtraBold', bold: false, size: 0.055, primary: '111111', box: 'FFE14D', boxAlpha: 0x00, bord: 0.35, spacing: 0.6 },
+  rodape: { font: 'Montserrat', bold: true, size: 0.036, primary: 'FFFFFF', box: '0B0D12', boxAlpha: 0x40, bord: 0.45, spacing: 0.3 },
+  sublinhado: { font: 'Montserrat ExtraBold', bold: false, size: 0.06, primary: 'FFFFFF', outline: '000000', bord: 0.025, shadow: 0, spacing: -0.3, underline: true },
 };
 const TITLE_FADE_MS = 200;
+const HEADLINE_SUB_SCALE = 0.62; // tamanho das linhas depois da 1ª, quando "título + subtítulo" está ligado
 
 /** RRGGBB → &HAABBGGRR do ASS */
 function assColor(hex, alpha = 0) {
@@ -54,7 +59,11 @@ function titleStyleLine(name, t, W, H) {
   const outline = t.box ? assColor(t.box, t.boxAlpha) : assColor(t.outline || '000000');
   const back = t.box ? assColor(t.box, t.boxAlpha) : assColor('000000', 0x60);
   const margin = Math.round(W * 0.06);
-  return `Style: ${[name, t.font, fontSize, assColor(t.primary), assColor(t.primary), outline, back, t.bold ? -1 : 0, 0, 0, 0, 100, 100, 0, 0, t.box ? 3 : 1, bord, t.shadow || 0, 5, margin, margin, 0, 1].join(',')}`;
+  return `Style: ${[
+    name, t.font, fontSize, assColor(t.primary), assColor(t.primary), outline, back,
+    t.bold ? -1 : 0, 0, t.underline ? -1 : 0, 0, 100, 100, t.spacing || 0, 0,
+    t.box ? 3 : 1, bord, t.shadow || 0, 5, margin, margin, 0, 1,
+  ].join(',')}`;
 }
 
 /**
@@ -87,7 +96,15 @@ function titleEvents(titles, W, H) {
       const preset = TITLE_PRESETS[t.style] || TITLE_PRESETS.titulo;
       const x = Math.round(W / 2);
       const y = Math.round(H * Math.min(0.95, Math.max(0.05, t.position ?? 0.5)));
-      const text = t.lines.map(escapeText).join('\\N');
+      let text;
+      if (t.headline && t.lines.length > 1) {
+        // 1ª linha no tamanho normal do estilo, linhas seguintes menores (subtítulo)
+        const fontSize = Math.round(preset.size * Math.sqrt(W * H));
+        const subSize = Math.round(fontSize * HEADLINE_SUB_SCALE);
+        text = t.lines.map((l, i) => `{\\fs${i === 0 ? fontSize : subSize}}${escapeText(l)}`).join('\\N');
+      } else {
+        text = t.lines.map(escapeText).join('\\N');
+      }
       const override = `\\an5\\pos(${x},${y})${titleColorOverride(t, preset)}${titleAnimTag(t)}`;
       // camada 1: títulos ficam por cima da legenda
       return `Dialogue: 1,${assTime(t.start)},${assTime(t.end)},T_${t.style},,0,0,0,,{${override}}${text}`;

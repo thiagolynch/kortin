@@ -102,7 +102,7 @@ describe('títulos', () => {
   });
   it('exportação: validação recusa lixo e só gera ValidationError', () => {
     const ok = validateExportJob(job({}, { titles: titlesForExport([{ text: 'Oi', start: 1, duration: 2, style: 'rodape', position: 0.8 }], '9:16') }), g());
-    expect(ok.options.titles).toEqual([{ start: 1, end: 3, lines: ['Oi'], style: 'rodape', position: 0.8, color: null, accent: null, anim: 'fade' }]);
+    expect(ok.options.titles).toEqual([{ start: 1, end: 3, lines: ['Oi'], style: 'rodape', position: 0.8, color: null, accent: null, anim: 'fade', headline: false }]);
     expect(() => validateExportJob(job({}, { titles: [{ start: 2, end: 1, lines: ['x'] }] }), g())).toThrow(ValidationError);
     fc.assert(fc.property(fc.anything(), (titles) => {
       try { validateExportJob(job({}, { titles }), g()); } catch (e) { expect(e).toBeInstanceOf(ValidationError); }
@@ -149,5 +149,42 @@ describe('títulos', () => {
     expect(() => validateExportJob(job({}, { titles: [{ start: 0, end: 1, lines: ['x'], accent: '#zzzzzz' }] }), g())).toThrow(ValidationError);
     const ok = validateExportJob(job({}, { titles: [{ start: 0, end: 1, lines: ['x'], color: '#ABCDEF' }] }), g());
     expect(ok.options.titles[0].color).toBe('#abcdef');
+  });
+  it('estilo "sublinhado" gera Underline=-1 na Style do .ass', () => {
+    const ass = buildAss([], { style: 'classica' }, 1080, 1920, []);
+    const line = ass.split('\n').find((l) => l.startsWith('Style: T_sublinhado,'));
+    expect(line.split(',')[9]).toBe('-1'); // campo Underline
+    const outros = ['titulo', 'destaque', 'rodape'].map((n) => ass.split('\n').find((l) => l.startsWith(`Style: T_${n},`)));
+    for (const l of outros) expect(l.split(',')[9]).toBe('0');
+  });
+  it('cada preset de título tem seu próprio "Spacing" (identidade tipográfica sem fonte nova)', () => {
+    const ass = buildAss([], { style: 'classica' }, 1080, 1920, []);
+    const spacing = (name) => Number(ass.split('\n').find((l) => l.startsWith(`Style: T_${name},`)).split(',')[13]);
+    expect(spacing('titulo')).toBe(0);
+    expect(spacing('destaque')).toBe(0.6);
+    expect(spacing('rodape')).toBe(0.3);
+    expect(spacing('sublinhado')).toBe(-0.3);
+  });
+  it('"headline" (título + subtítulo) gera \\fs por linha, maior na 1ª e menor nas seguintes', () => {
+    const ass = buildAss([], { style: 'classica' }, 1080, 1920, [
+      { start: 0, end: 1, lines: ['GRANDE', 'pequeno'], style: 'titulo', position: 0.5, headline: true },
+    ]);
+    const ev = ass.split('\n').find((l) => l.startsWith('Dialogue: 1,'));
+    const sizes = [...ev.matchAll(/\\fs(\d+)/g)].map((m) => Number(m[1]));
+    expect(sizes.length).toBe(2);
+    expect(sizes[0]).toBeGreaterThan(sizes[1]);
+    expect(sizes[1]).toBe(Math.round(sizes[0] * 0.62));
+  });
+  it('sem "headline" ou com 1 linha só, não gera \\fs extra', () => {
+    const one = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['Só uma linha'], style: 'titulo', position: 0.5, headline: true }]);
+    expect(one.split('\n').find((l) => l.startsWith('Dialogue: 1,'))).not.toMatch(/\\fs\d/);
+    const off = buildAss([], { style: 'classica' }, 1080, 1920, [{ start: 0, end: 1, lines: ['A', 'B'], style: 'titulo', position: 0.5, headline: false }]);
+    expect(off.split('\n').find((l) => l.startsWith('Dialogue: 1,'))).not.toMatch(/\\fs\d/);
+  });
+  it('"headline" é sempre booleano, mesmo vindo de lixo', () => {
+    const ok = validateExportJob(job({}, { titles: [{ start: 0, end: 1, lines: ['x'], headline: 'sim' }] }), g());
+    expect(ok.options.titles[0].headline).toBe(true);
+    const ok2 = validateExportJob(job({}, { titles: [{ start: 0, end: 1, lines: ['x'] }] }), g());
+    expect(ok2.options.titles[0].headline).toBe(false);
   });
 });

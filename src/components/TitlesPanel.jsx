@@ -38,6 +38,11 @@ export default function TitlesPanel({ titles, selectedId, onSelect, onAdd, api, 
             ))}
           </div>
 
+          <label className="title-headline-toggle">
+            <input type="checkbox" checked={!!sel.headline} onChange={() => api.commit(sel.id, { headline: !sel.headline })} />
+            Primeira linha maior (título + subtítulo)
+          </label>
+
           <div className="insp-control-head"><label>Entrada</label></div>
           <div className="segmented compact">
             {Object.entries(TITLE_ANIMS).map(([k, label]) => (
