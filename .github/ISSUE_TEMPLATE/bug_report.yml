@@ -1,0 +1,83 @@
+name: Relatar um bug
+description: Reporte um problema encontrado no Kortin Beta
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por testar o Kortin!
+        Este repositório é público — não anexe vídeos, transcrições, prints com dados pessoais ou qualquer arquivo privado.
+        Para um problema que você prefira não descrever em público, use o formulário de feedback do beta (veja as opções na tela anterior) em vez desta issue.
+  - type: input
+    id: version
+    attributes:
+      label: Versão do Kortin
+      placeholder: "0.7.10"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Versão do Windows
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área afetada
+      options:
+        - Instalação
+        - Atualização
+        - Importação de vídeo
+        - Edição
+        - Áudio ou música
+        - Títulos ou legendas
+        - Exportação
+        - Recuperação de projeto
+        - Desempenho
+        - Outro
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Como reproduzir
+      description: Descreva os passos necessários para reproduzir a falha.
+      placeholder: |
+        1. Abrir o Kortin
+        2. Importar um vídeo
+        3. Iniciar a exportação
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Resultado observado
+    validations:
+      required: true
+  - type: dropdown
+    id: reproducibility
+    attributes:
+      label: Frequência
+      options:
+        - Sempre
+        - Às vezes
+        - Aconteceu uma vez
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Mensagem de erro ou log sanitizado
+      description: Remova caminhos pessoais, tokens e outros dados sensíveis.
+    validations:
+      required: false

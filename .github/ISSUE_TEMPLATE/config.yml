@@ -1,0 +1,7 @@
+# Mostra, na tela de "Nova issue", um atalho pro formulário de feedback além do template de bug.
+# Troque a URL abaixo pelo link real do formulário assim que ele existir (Google Forms ou equivalente).
+blank_issues_enabled: true
+contact_links:
+  - name: Formulário de feedback do Kortin Beta
+    url: https://forms.gle/SUBSTITUA-PELO-LINK-REAL
+    about: Prefira o formulário pra dificuldades de uso, avaliação geral ou qualquer coisa que não seja um bug reproduzível — não precisa de conta no GitHub e não é público.
