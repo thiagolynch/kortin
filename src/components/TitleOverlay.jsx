@@ -1,7 +1,6 @@
 import { memo } from 'react';
 import { useDerivedPlayhead } from '../state/playhead';
-import { TITLE_STYLES, activeTitleKey, titleLines, HEADLINE_SUB_SCALE } from '../lib/titles';
-import { ASS_FONT_EM } from '../lib/captions';
+import { TITLE_STYLES, TITLE_FONT_EM, activeTitleKey, titleLines, HEADLINE_SUB_SCALE } from '../lib/titles';
 
 /**
  * Prévia dos títulos sobre o vídeo, com o mesmo tamanho relativo e as mesmas linhas da exportação.
@@ -14,7 +13,7 @@ function TitleOverlay({ titles, aspect, store, width, height, selectedId, onSele
   const base = Math.sqrt(width * height);
   return titles.filter((t) => ids.has(t.id)).map((t) => {
     const assSize = TITLE_STYLES[t.style].size * base; // o tamanho que vai no .ass
-    const fs = assSize / ASS_FONT_EM;
+    const fs = assSize / (TITLE_FONT_EM[t.style] || TITLE_FONT_EM.titulo);
     const lines = titleLines(t, aspect);
     const isHeadline = t.headline && lines.length > 1;
     return (

@@ -4,10 +4,23 @@ import C from '../../shared/constants.json';
 import { clamp, uid } from './timeline';
 
 export const TITLE_STYLES = {
-  titulo: { label: 'Título', size: 0.085, position: 0.45 },
-  destaque: { label: 'Destaque', size: 0.055, position: 0.3 },
+  titulo: { label: 'Título', size: 0.078, position: 0.45 },
+  destaque: { label: 'Destaque', size: 0.05, position: 0.3 },
   rodape: { label: 'Rodapé', size: 0.036, position: 0.82 },
-  sublinhado: { label: 'Sublinhado', size: 0.06, position: 0.3 },
+  sublinhado: { label: 'Sublinhado', size: 0.068, position: 0.3 },
+};
+
+/**
+ * Fator entre o Fontsize do .ass e o font-size do CSS, por fonte (ver ASS_FONT_EM em lib/captions.js
+ * para a explicação — aqui é o mesmo cálculo, mas cada fonte de título tem sua própria proporção
+ * ascent+descent/em, medida nos arquivos em assets/fonts/ com fontTools: usWinAscent+usWinDescent,
+ * dividido pelas unidades por em da fonte).
+ */
+export const TITLE_FONT_EM = {
+  titulo: 1.7334, // Anton (2876+674)/2048
+  destaque: 1.347, // Archivo Black (1035+312)/1000
+  rodape: 1.562, // Montserrat (1109+453)/1000 — mesma fonte das legendas
+  sublinhado: 1.3, // Bebas Neue (950+350)/1000
 };
 
 export const TITLE_LIMITS = { minDuration: 0.5, maxDuration: 15, maxLines: C.LIMITS.maxTitleLines, maxChars: C.LIMITS.maxTitleChars };
