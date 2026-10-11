@@ -4,7 +4,7 @@ import { MAX_CHARS, cuesForExport, deriveCues } from '../lib/captions';
 
 /** Configura a exportação e devolve os trabalhos para a fila (a exportação roda em segundo plano). */
 export default function ExportDialog({
-  clips, total, aspect, fit, projectName, segments, transcripts, captionSettings, onQueue, onClose,
+  clips, total, aspect, fit, projectName, segments, transcripts, captionSettings, music, onQueue, onClose,
 }) {
   const [formats, setFormats] = useState([aspect]);
   const [quality, setQuality] = useState('padrao');
@@ -59,6 +59,7 @@ export default function ExportDialog({
           options: {
             width: ASPECTS[k].width, height: ASPECTS[k].height, fit, fps: 30,
             crf: q.crf, preset: q.preset, encoder, output: outputs[i], captions: captionsFor(k),
+            ...(music ? { music: { path: music.path, volume: music.volume, duck: music.duck, fadeIn: music.fadeIn, fadeOut: music.fadeOut } } : {}),
           },
         }))
       );
@@ -75,7 +76,7 @@ export default function ExportDialog({
 
         <div className="export-summary">
           <div><label>Duração</label><strong>{formatTime(total)}</strong><small>{clips.length} clipe(s)</small></div>
-          <div><label>Enquadramento</label><strong>{FITS[fit]}</strong></div>
+          <div><label>Enquadramento</label><strong>{FITS[fit]}</strong>{music && <small title={music.name}>♪ com música</small>}</div>
           <div><label>Resolução</label><strong>1080p</strong><small>30 fps</small></div>
         </div>
 

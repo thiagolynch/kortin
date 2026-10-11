@@ -36,7 +36,7 @@ button { font: inherit; color: inherit; }
 .app {
   height: 100%;
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr) 236px;
+  grid-template-rows: 52px minmax(0, 1fr) 262px;
 }
 
 /* ---------- Topo ---------- */
@@ -474,3 +474,49 @@ input[type='range'] { accent-color: var(--accent); width: 140px; }
 .relink-info strong, .relink-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .relink-list li.ok small { color: #6ee7b7; }
 .relink-note { margin: 8px 0 0; }
+
+/* ---------- v0.6: cortes sugeridos ---------- */
+:root { --cut-pause: #f59e0b; --cut-filler: #f472b6; --cut-restart: #a78bfa; }
+.cut-review .cut-options { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.cut-review .cut-options input[type=range] { width: 100%; }
+.cut-summary { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin: 6px 0; gap: 8px; flex-wrap: wrap; }
+.cut-summary .link-btn { font-size: 12px; }
+.cut-hint { margin: 0 0 6px; color: #c4b5fd; }
+.cut-list { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow: auto; margin-bottom: 8px; outline: none; border-radius: 8px; }
+.cut-list:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.cut-item { display: grid; grid-template-columns: auto auto 1fr auto; grid-template-areas: "chk badge time play" ". reason reason reason"; align-items: center; column-gap: 6px; row-gap: 2px; padding: 5px 6px; border-radius: 7px; cursor: pointer; border: 1px solid transparent; font-size: 12px; opacity: .6; }
+.cut-item.on { opacity: 1; }
+.cut-item.focus { border-color: var(--line-2); background: var(--bg); }
+.cut-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; padding: 2px 6px; border-radius: 5px; color: #111; }
+.cut-pause .cut-badge { background: var(--cut-pause); }
+.cut-filler .cut-badge { background: var(--cut-filler); }
+.cut-restart .cut-badge { background: var(--cut-restart); }
+.cut-item > input { grid-area: chk; }
+.cut-item .cut-badge { grid-area: badge; justify-self: start; }
+.cut-item .cut-time { grid-area: time; justify-self: end; }
+.cut-item .icon-btn { grid-area: play; }
+.cut-reason { grid-area: reason; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cut-time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.icon-btn.sm { width: 24px; height: 24px; }
+.tl-cut { position: absolute; top: 0; bottom: 0; z-index: 3; cursor: pointer; border: 1px dashed currentColor; background: transparent; border-radius: 3px; opacity: .8; }
+.tl-cut.on { background: color-mix(in srgb, currentColor 35%, transparent); border-style: solid; }
+.tl-cut.focus { outline: 2px solid #fff; outline-offset: 1px; }
+.tl-cut.cut-pause { color: var(--cut-pause); }
+.tl-cut.cut-filler { color: var(--cut-filler); }
+.tl-cut.cut-restart { color: var(--cut-restart); }
+
+/* ---------- v0.6: música de fundo ---------- */
+.media-tab { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.media-tab > .bin-grid, .media-tab > .bin-empty { flex: 1; min-height: 0; overflow: auto; }
+.music-card { margin: 8px 10px 10px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+.music-card.empty { gap: 8px; }
+.music-card.empty strong { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.music-card.empty p { margin: 4px 0 0; }
+.music-head { display: flex; align-items: center; gap: 8px; color: #7dd3fc; }
+.music-name { flex: 1; min-width: 0; display: flex; flex-direction: column; color: var(--text); }
+.music-name strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-control input[type=range] { width: 100%; }
+.tl-music { position: absolute; left: 0; right: 0; top: 180px; height: 22px; }
+.tl-music-bar { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: #0ea5e933; border: 1px solid #38bdf866; overflow: hidden; font-size: 11px; color: #bae6fd; display: flex; align-items: center; padding: 0 8px; white-space: nowrap; }
+.tl-music-bar.duck { background: repeating-linear-gradient(90deg, #0ea5e933 0 10px, #0ea5e922 10px 20px); }
+.tl-music-loop { position: absolute; top: 3px; bottom: 3px; width: 0; border-left: 1px dashed #7dd3fc99; }

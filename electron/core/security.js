@@ -19,6 +19,7 @@ const fail = (msg) => {
 // ---------------- Caminhos ----------------
 
 const VIDEO_EXT = new Set(C.VIDEO_EXT);
+const AUDIO_EXT = new Set(C.AUDIO_EXT);
 const extOf = (p) => path.extname(p).slice(1).toLowerCase();
 
 /**
@@ -37,10 +38,24 @@ function assertLocalPath(p, label = 'arquivo') {
 
 const isVideoPath = (p) => VIDEO_EXT.has(extOf(p));
 const isProjectPath = (p) => extOf(p) === C.PROJECT_EXT;
+const isAudioPath = (p) => AUDIO_EXT.has(extOf(p));
 
 function assertVideoPath(p) {
   const n = assertLocalPath(p, 'vídeo');
   if (!isVideoPath(n)) fail(`Formato não suportado: ${path.basename(n)}`);
+  return n;
+}
+
+function assertAudioPath(p) {
+  const n = assertLocalPath(p, 'música');
+  if (!isAudioPath(n)) fail(`Formato de áudio não suportado: ${path.basename(n)}`);
+  return n;
+}
+
+/** Vídeo ou áudio (o que um projeto pode citar). */
+function assertMediaPath(p) {
+  const n = assertLocalPath(p, 'mídia');
+  if (!isVideoPath(n) && !isAudioPath(n)) fail(`Formato não suportado: ${path.basename(n)}`);
   return n;
 }
 
@@ -156,6 +171,21 @@ function validateCaptions(captions) {
   return { cues, settings };
 }
 
+/** Música de fundo: arquivo de áudio autorizado + números dentro de limites. */
+function validateMusic(m, grants) {
+  if (m == null) return undefined;
+  if (typeof m !== 'object') fail('Música inválida.');
+  const p = assertAudioPath(m.path);
+  if (!grants.hasMedia(p)) fail('A música não foi autorizada. Escolha-a de novo.');
+  return {
+    path: p,
+    volume: num(m.volume ?? C.MUSIC.defaultVolume, 'volume da música', { min: 0, max: 1 }),
+    duck: m.duck !== false,
+    fadeIn: num(m.fadeIn ?? 0, 'fade da música', { min: 0, max: C.MUSIC.maxFade }),
+    fadeOut: num(m.fadeOut ?? 0, 'fade da música', { min: 0, max: C.MUSIC.maxFade }),
+  };
+}
+
 /**
  * Valida um trabalho de exportação vindo do renderer.
  * Números entram em uma linha de filtros do FFmpeg: sem esta validação, um texto como
@@ -172,6 +202,7 @@ function validateExportJob(job, grants) {
   if (!grants.hasOutput(output)) fail('Escolha de novo onde salvar o vídeo.');
   const clips = job.clips.map((c, i) => validateClip(c, grants, i));
   if (clips.some((c) => key(c.path) === key(output))) fail('O vídeo exportado não pode substituir um dos vídeos usados no projeto.');
+  const music = validateMusic(o.music, grants);
   return {
     clips,
     options: {
@@ -184,6 +215,7 @@ function validateExportJob(job, grants) {
       preset: oneOf(o.preset ?? 'veryfast', C.X264_PRESETS, 'velocidade de compressão'),
       encoder: oneOf(o.encoder ?? 'libx264', C.ENCODERS, 'codificador'),
       captions: validateCaptions(o.captions),
+      music,
     },
   };
 }
@@ -196,6 +228,10 @@ module.exports = {
   assertProjectPath,
   isVideoPath,
   isProjectPath,
+  isAudioPath,
+  assertAudioPath,
+  assertMediaPath,
+  validateMusic,
   validateExportJob,
   validateCaptions,
   num,

@@ -3,6 +3,8 @@
   "PROJECT_EXT": "kortin",
   "PROJECT_VERSION": 4,
   "VIDEO_EXT": ["mp4", "mov", "m4v", "mkv", "webm", "avi", "wmv", "mts", "m2ts", "3gp"],
+  "AUDIO_EXT": ["mp3", "wav", "m4a", "aac", "ogg", "oga", "opus", "flac", "wma"],
+  "MUSIC": { "maxFade": 10, "defaultVolume": 0.25 },
   "MIN_CLIP": 0.1,
   "MAX_VOLUME": 2,
   "MAX_FADE": 3,

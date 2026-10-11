@@ -37,6 +37,23 @@ function parseProbe(text) {
   };
 }
 
+/** Leitura de arquivo de áudio (música): só precisa de uma trilha de áudio e da duração. */
+function parseAudioProbe(text) {
+  const d = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(text);
+  if (!/Stream #\d+:\d+.*: Audio:/.test(text)) throw new Error('Este arquivo não tem áudio.');
+  if (!d) throw new Error('Não foi possível ler a duração da música.');
+  const duration = toSeconds(d[1], d[2], d[3]);
+  if (!(duration > 0.5)) throw new Error('A música é curta demais.');
+  return { duration };
+}
+
+async function probeAudio(file) {
+  const { stderr } = await run(['-hide_banner', '-i', file]);
+  if (/No such file or directory/.test(stderr)) throw new Error('Arquivo não encontrado.');
+  if (/Invalid data found/i.test(stderr)) throw new Error('Formato de áudio não suportado.');
+  return parseAudioProbe(stderr);
+}
+
 async function probe(file) {
   const { stderr } = await run(['-hide_banner', '-i', file]);
   if (/No such file or directory/.test(stderr)) throw new Error('Arquivo não encontrado.');
@@ -56,4 +73,4 @@ async function thumbnail(file, atSeconds) {
   return `data:image/jpeg;base64,${stdout.toString('base64')}`;
 }
 
-module.exports = { parseProbe, probe, thumbnail };
+module.exports = { parseProbe, parseAudioProbe, probe, probeAudio, thumbnail };

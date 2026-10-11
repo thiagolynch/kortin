@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CAPTION_STYLES, FILLERS, LANGUAGES, cueAt, cueText, planCleanup } from '../lib/captions';
+import { CAPTION_STYLES, LANGUAGES, cueAt, cueText } from '../lib/captions';
+import CutReview from './CutReview';
 import { useDerivedPlayhead } from '../state/playhead';
 import { cleanError, formatTime } from '../lib/timeline';
 import { Icon } from './Icons';
@@ -8,7 +9,7 @@ import { Icon } from './Icons';
  * Painel de legendas: gerar (IA no PC), estilo, limpeza da fala e edição do texto.
  */
 export default function CaptionsPanel({
-  clips, cues, transcripts, settings, store, api, onSeek, onApplyCleanup, notify,
+  clips, cues, transcripts, settings, store, api, onSeek, review, notify,
 }) {
   const onSettings = api.settings;
   // legenda ativa: busca binária, e só re-renderiza quando a legenda muda (não a cada quadro)
@@ -18,8 +19,6 @@ export default function CaptionsPanel({
   const [job, setJob] = useState(null); // { index, total, name, p }
   const [confirmDownload, setConfirmDownload] = useState(false);
   const [error, setError] = useState('');
-  const [pauses, setPauses] = useState(true);
-  const [fillers, setFillers] = useState(() => FILLERS.filter((f) => f.on).map((f) => f.word));
   const [editing, setEditing] = useState(null); // id da legenda em edição
 
   const refresh = () => window.kortin.captionsStatus().then(setStatus).catch(() => setStatus({ available: false, models: {} }));
@@ -71,13 +70,6 @@ export default function CaptionsPanel({
     if (download) window.kortin.cancelDownload();
     if (job) window.kortin.cancelTranscribe();
   };
-
-  const fillerDefs = FILLERS.filter((f) => fillers.includes(f.word));
-  const plan = useMemo(
-    () => (Object.keys(transcripts).length ? planCleanup(clips, transcripts, { pauses, fillers: fillerDefs }) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clips, transcripts, pauses, fillers.join(',')]
-  );
 
   if (!status) return <div className="cap-body muted">Verificando…</div>;
 
@@ -232,34 +224,8 @@ export default function CaptionsPanel({
             </div>
           </section>
 
-          {/* Limpeza da fala */}
-          <section className="cap-card">
-            <strong>Limpar a fala</strong>
-            <p className="muted small">Corta pausas e vícios usando a transcrição. Dá para desfazer com Ctrl+Z.</p>
-            <label className="switch">
-              <input type="checkbox" checked={pauses} onChange={(e) => setPauses(e.target.checked)} />
-              <span>Pausas longas (mais de 0,7 s)</span>
-            </label>
-            <div className="filler-chips">
-              {FILLERS.map((f) => (
-                <button
-                  key={f.word}
-                  className={fillers.includes(f.word) ? 'active' : ''}
-                  onClick={() => setFillers((l) => (l.includes(f.word) ? l.filter((x) => x !== f.word) : [...l, f.word]))}
-                >
-                  “{f.word}”
-                </button>
-              ))}
-            </div>
-            <button
-              className="btn sm"
-              disabled={!plan?.cuts}
-              onClick={() => onApplyCleanup(plan, `${plan.cuts} corte(s), ${plan.seconds.toFixed(1).replace('.', ',')} s a menos`)}
-            >
-              <Icon.Split width={14} height={14} />
-              {plan?.cuts ? `Aplicar ${plan.cuts} corte(s) · −${plan.seconds.toFixed(1).replace('.', ',')} s` : 'Nada para cortar'}
-            </button>
-          </section>
+          {/* Cortes sugeridos (Módulo 3) */}
+          <CutReview {...review} />
 
           {/* Texto */}
           <section className="cap-card cap-list-card">

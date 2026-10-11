@@ -6,7 +6,9 @@ const C = require('../../shared/constants.json');
 const engine = require('../engine');
 const { findByName } = require('../services/projectMedia');
 const { createMediaCache } = require('../services/mediaCache');
-const { assertVideoPath, isVideoPath, isProjectPath, assertLocalPath } = require('../core/security');
+const {
+  assertVideoPath, assertAudioPath, assertMediaPath, isVideoPath, isAudioPath, isProjectPath, assertLocalPath,
+} = require('../core/security');
 const { handle } = require('./handle');
 
 function register(ctx) {
@@ -33,15 +35,36 @@ function register(ctx) {
     return ok;
   });
 
+  /** Música de fundo: diálogo de áudio; só o arquivo escolhido é autorizado. */
+  handle('dialog:openMusic', async () => {
+    const res = await dialog.showOpenDialog(ctx.window(), {
+      title: 'Escolher música de fundo',
+      properties: ['openFile'],
+      filters: [{ name: 'Áudio', extensions: C.AUDIO_EXT }],
+    });
+    if (res.canceled) return null;
+    const p = assertAudioPath(res.filePaths[0]);
+    grants.allowMedia(p);
+    return p;
+  });
+
+  handle('media:probeAudio', async (_e, filePath) => {
+    const p = assertAudioPath(filePath);
+    if (!grants.hasMedia(p)) throw Object.assign(new Error('Arquivo não autorizado.'), { userFacing: true });
+    if (!fs.existsSync(p)) throw Object.assign(new Error('Arquivo não encontrado.'), { userFacing: true });
+    const meta = await cache.remember('probeAudio', p, () => engine.probeAudio(p));
+    return { ...meta, path: p, name: path.basename(p) };
+  });
+
   /** "Localizar…" um vídeo que sumiu: o usuário aponta o arquivo; só ele é autorizado. */
   handle('media:locate', async (_e, name) => {
     const res = await dialog.showOpenDialog(ctx.window(), {
       title: `Localizar ${String(name || 'vídeo').slice(0, 120)}`,
       properties: ['openFile'],
-      filters: [{ name: 'Vídeos', extensions: C.VIDEO_EXT }],
+      filters: isAudioPath(String(name || '')) ? [{ name: 'Áudio', extensions: C.AUDIO_EXT }] : [{ name: 'Vídeos', extensions: C.VIDEO_EXT }],
     });
     if (res.canceled) return null;
-    const p = assertVideoPath(res.filePaths[0]);
+    const p = assertMediaPath(res.filePaths[0]);
     grants.allowMedia(p);
     return p;
   });
@@ -52,9 +75,9 @@ function register(ctx) {
     const res = await dialog.showOpenDialog(ctx.window(), { title: 'Procurar os vídeos nesta pasta', properties: ['openDirectory'] });
     if (res.canceled) return null;
     const root = assertLocalPath(res.filePaths[0], 'pasta');
-    const clean = names.slice(0, 2000).map((n) => path.basename(String(n))).filter(isVideoPath);
+    const clean = names.slice(0, 2000).map((n) => path.basename(String(n))).filter((n) => isVideoPath(n) || isAudioPath(n));
     const { found, complete } = await findByName(root, clean);
-    for (const p of Object.values(found)) grants.allowMedia(assertVideoPath(p));
+    for (const p of Object.values(found)) grants.allowMedia(assertMediaPath(p));
     return { found, complete };
   });
 
@@ -66,7 +89,7 @@ function register(ctx) {
       try {
         const p = assertLocalPath(raw);
         if (!fs.existsSync(p)) continue;
-        if (isVideoPath(p)) grants.allowMedia(p);
+        if (isVideoPath(p) || isAudioPath(p)) grants.allowMedia(p);
         else if (isProjectPath(p)) grants.allowProject(p);
         else continue;
         accepted.push(p);

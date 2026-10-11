@@ -80,6 +80,32 @@ function audioChain(i, c, silentIndex) {
   return { filter: `[${i}:a:0]${chain.join(',')}[a${i}]`, silent: false };
 }
 
+// Abaixamento automático (ducking): a voz controla um compressor na música.
+// Quando há fala, a música cai ~12 dB em 20 ms e volta em ~0,4 s depois que a fala para.
+const DUCK = 'sidechaincompress=threshold=0.02:ratio=12:attack=20:release=400:makeup=1';
+
+/** Entrada da música: repete sem parar (-stream_loop) e é cortada no tamanho do vídeo. */
+const musicInput = (music) => ['-stream_loop', '-1', '-i', music.path];
+
+/**
+ * Filtros que misturam a música no áudio principal. mainLabel: rótulo do áudio do vídeo (ex.: "[amain]").
+ * Termina em [outa]. alimiter evita estourar quando voz e música somam.
+ */
+function musicMix(mainLabel, musicIndex, total, music) {
+  const fi = Math.min(music.fadeIn || 0, total / 2);
+  const fo = Math.min(music.fadeOut || 0, total / 2);
+  const chain = [AFMT, `atrim=0:${n(total)}`, 'asetpts=PTS-STARTPTS', `volume=${(music.volume ?? 0.25).toFixed(3)}`];
+  if (fi > 0) chain.push(`afade=t=in:st=0:d=${n(fi)}`);
+  if (fo > 0) chain.push(`afade=t=out:st=${n(total - fo)}:d=${n(fo)}`);
+  const out = [`[${musicIndex}:a:0]${chain.join(',')}[mus]`];
+  if (music.duck) {
+    out.push(`${mainLabel}asplit=2[amix][aside]`, `[mus][aside]${DUCK}[mduck]`, '[amix][mduck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[outa]');
+  } else {
+    out.push(`${mainLabel}[mus]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[outa]`);
+  }
+  return out;
+}
+
 /**
  * Monta { inputs, graph } para a exportação.
  * inputs: argumentos de entrada · graph: o texto do -filter_complex (vai para um arquivo)
@@ -104,7 +130,12 @@ function buildGraph(clips, opts) {
   });
   silent.forEach((dur) => inputs.push('-f', 'lavfi', '-t', n(dur), '-i', 'anullsrc=r=48000:cl=stereo'));
 
-  filters.push(`${clips.map((_, i) => `[v${i}][a${i}]`).join('')}concat=n=${clips.length}:v=1:a=1[outv0][outa]`);
+  const music = opts.music || null;
+  filters.push(`${clips.map((_, i) => `[v${i}][a${i}]`).join('')}concat=n=${clips.length}:v=1:a=1[outv0][${music ? 'amain' : 'outa'}]`);
+  if (music) {
+    inputs.push(...musicInput(music));
+    filters.push(...musicMix('[amain]', silentIndex, clips.reduce((t, c) => t + durOf(c), 0), music));
+  }
   filters.push(opts.captionFilter ? `[outv0]${opts.captionFilter}[outv]` : '[outv0]null[outv]');
   return { inputs, graph: filters.join(';\n') };
 }
@@ -135,11 +166,18 @@ function buildExportArgs(clips, opts, { graphFile, intermediate = false } = {}) 
  * todos ao mesmo tempo), aplica a legenda e codifica no formato pedido.
  */
 function buildConcatArgs(listFile, opts) {
+  // com música, o passo final vira um grafo: vídeo (+legenda) e áudio misturado com a música
+  const mix = opts.music
+    ? [
+      ...musicInput(opts.music),
+      '-filter_complex', [`[0:v:0]${opts.captionFilter || 'null'}[outv]`, ...musicMix('[0:a:0]', 1, opts.total, opts.music)].join(';'),
+      '-map', '[outv]', '-map', '[outa]',
+    ]
+    : [...(opts.captionFilter ? ['-vf', opts.captionFilter] : []), '-map', '0:v:0', '-map', '0:a:0'];
   return [
     '-hide_banner', '-y', '-nostdin',
     '-f', 'concat', '-safe', '0', '-i', listFile,
-    ...(opts.captionFilter ? ['-vf', opts.captionFilter] : []),
-    '-map', '0:v:0', '-map', '0:a:0',
+    ...mix,
     ...encoderArgs(opts.encoder || 'libx264', opts.crf ?? 20, opts.preset),
     '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart',
     '-progress', 'pipe:1', '-nostats',

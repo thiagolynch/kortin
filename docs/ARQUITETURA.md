@@ -1,4 +1,4 @@
-# Arquitetura do Kortin (v0.4)
+# Arquitetura do Kortin (v0.6)
 
 ## Fronteiras
 
@@ -34,13 +34,15 @@ shared/constants.json — limites e listas usados pelos dois lados
 7. **Projetos portáteis.** O `.kortin` guarda caminho absoluto + relativo de cada vídeo. Ao abrir: absoluto → relativo → mesmo nome na pasta do projeto → diálogo "Arquivos não encontrados" (localizar ou procurar numa pasta, busca limitada).
 8. **Cache em disco** (`services/mediaCache.js`): leitura, miniatura e onda sonora por caminho+tamanho+data, LRU de 200 MB.
 9. **Modelos de IA íntegros.** URL em revisão fixa do Hugging Face + tamanho e SHA-256 no código; conferido no download e antes do primeiro uso; o CI confere os hashes contra o servidor (`npm run verify:models`).
+10. **Cortes sugeridos são dados, não ações.** `suggestCuts` (puro) lista pausas, vícios e frases reiniciadas com motivo, tempo no arquivo e posição na timeline; a decisão (aceito/rejeitado) fica na interface por id estável; `applyCuts` aplica só os aceitos, num único passo de desfazer.
+11. **Música com abaixamento pela própria voz.** Na exportação, a voz alimenta um `sidechaincompress` na música (−12 dB, ataque 20 ms, retorno 400 ms), seguido de `alimiter`. A música entra com `-stream_loop -1` e é cortada no total; na exportação em partes, só no passo final (sem emendas). A prévia aproxima o abaixamento pelos clipes com som.
 
 ## Testes
 
 | Camada | Comando | O quê |
 |---|---|---|
-| Unidade + propriedade | `npm run test:unit` | timeline, legendas, reducer, validadores (fuzz), parseProbe, Range, ASS, migração |
-| Integração | `npm run test:engine` | exportação real com FFmpeg: formatos, áudio, legendas, 160 clipes, Unicode, cancelamento |
+| Unidade + propriedade | `npm run test:unit` | timeline, legendas, cortes sugeridos, música, reducer, validadores (fuzz), parseProbe, Range, ASS, migração, cache, integridade |
+| Integração | `npm run test:engine` | exportação real com FFmpeg: formatos, áudio, legendas, música com/sem abaixamento (medido por banda), 160 clipes, Unicode, cancelamento |
 | IA | `npm run test:whisper` | whisper.cpp real com modelo tiny |
 | Interface | `npx electron tests/screenshot.js editar\|legenda\|recuperar\|mover <pasta>` | roteiro na UI + prints |
 | Modelos | `npm run verify:models` | SHA-256 fixados conferem com o Hugging Face |

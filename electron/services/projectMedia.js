@@ -3,31 +3,39 @@
 // sozinho; o que não achar vai para a tela "Arquivos não encontrados".
 const fs = require('fs');
 const path = require('path');
-const { assertVideoPath } = require('../core/security');
+const { assertMediaPath } = require('../core/security');
 
 const toPosix = (p) => p.split(path.sep).join('/');
 
-/** Acrescenta `rel` (relativo à pasta do projeto, com "/") em cada clipe. */
+/** Acrescenta `rel` (relativo à pasta do projeto, com "/") em cada clipe e na música. */
 function withRelativePaths(data, projectFile) {
   const dir = path.dirname(projectFile);
+  const addRel = (item) => {
+    const rel = path.relative(dir, item.path);
+    // outro disco no Windows: não existe caminho relativo
+    return rel && !path.isAbsolute(rel) ? { ...item, rel: toPosix(rel) } : (({ rel: _r, ...rest }) => rest)(item);
+  };
   return {
     ...data,
-    clips: data.clips.map((c) => {
-      const rel = path.relative(dir, c.path);
-      // outro disco no Windows: não existe caminho relativo
-      return rel && !path.isAbsolute(rel) ? { ...c, rel: toPosix(rel) } : (({ rel: _r, ...rest }) => rest)(c);
-    }),
+    clips: data.clips.map(addRel),
+    ...(data.music && typeof data.music.path === 'string' ? { music: addRel(data.music) } : {}),
   };
 }
 
 /** Troca caminhos antigos pelos novos nos clipes e nas transcrições (que são indexadas por caminho). */
 function remapPaths(data, map) {
   const has = (p) => Object.prototype.hasOwnProperty.call(map, p);
-  if (!data.clips.some((c) => has(c.path))) return data;
+  const musicMoved = data.music && has(data.music.path);
+  if (!data.clips.some((c) => has(c.path)) && !musicMoved) return data;
   const transcripts = data.transcripts
     ? Object.fromEntries(Object.entries(data.transcripts).map(([p, t]) => [has(p) ? map[p] : p, t]))
     : data.transcripts;
-  return { ...data, clips: data.clips.map((c) => (has(c.path) ? { ...c, path: map[c.path] } : c)), transcripts };
+  return {
+    ...data,
+    clips: data.clips.map((c) => (has(c.path) ? { ...c, path: map[c.path] } : c)),
+    transcripts,
+    ...(musicMoved ? { music: { ...data.music, path: map[data.music.path] } } : {}),
+  };
 }
 
 /**
@@ -40,8 +48,9 @@ function resolveMedia(data, projectFile, exists = fs.existsSync) {
   const map = {};
   const missing = [];
   const seen = new Set();
-  for (const c of data.clips) {
-    if (seen.has(c.path)) continue;
+  const items = data.music && typeof data.music.path === 'string' ? [...data.clips, data.music] : data.clips;
+  for (const c of items) {
+    if (typeof c.path !== 'string' || seen.has(c.path)) continue;
     seen.add(c.path);
     const candidates = [c.path];
     if (dir && typeof c.rel === 'string' && c.rel) candidates.push(path.resolve(dir, c.rel));
@@ -49,7 +58,7 @@ function resolveMedia(data, projectFile, exists = fs.existsSync) {
     let found = null;
     for (const cand of candidates) {
       try {
-        const p = assertVideoPath(cand);
+        const p = assertMediaPath(cand);
         if (exists(p)) { found = p; break; }
       } catch { /* caminho recusado: tenta o próximo */ }
     }

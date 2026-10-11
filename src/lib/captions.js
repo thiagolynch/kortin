@@ -170,43 +170,109 @@ export function editCue(transcripts, cue, newText) {
   return { ...transcripts, [byPath]: { ...tr, words, edited: true } };
 }
 
+// ---------------- Sugestões de corte (Módulo 3: o app sugere, a pessoa decide) ----------------
+
+const PAD = 0.12; // folga em volta da fala: o tempo das palavras do whisper não é exato
+export const CUT_TYPES = {
+  pause: { label: 'Pausa', defaultOn: true },
+  filler: { label: 'Vício', defaultOn: true },
+  restart: { label: 'Reinício', defaultOn: false }, // heurística: começa desmarcado, a pessoa confere
+};
+
 /**
- * Planeja a "limpeza da fala": corta pausas longas e vícios de linguagem dos clipes com transcrição.
- * Retorna { clips, cuts, seconds } sem alterar nada (a interface mostra o resumo antes de aplicar).
+ * Frase reiniciada: a pessoa começa ("hoje eu vou…"), para e recomeça ("hoje eu vou mostrar").
+ * Procura, perto adiante, as mesmas 2 palavras de abertura. Corta da primeira tentativa até o recomeço.
+ * Devolve pares de índices [i, j]: i = início da tentativa abandonada, j = início do recomeço.
  */
-export function planCleanup(clips, transcripts, { pauses = true, minPause = 0.7, fillers = [] } = {}) {
+export function findRestarts(words, { window = 12, maxSeconds = 8 } = {}) {
+  const t = words.map((w) => norm(w.w));
+  const out = [];
+  for (let i = 0; i < words.length - 3; i++) {
+    if (!t[i] || !t[i + 1]) continue;
+    for (let j = i + 2; j < Math.min(words.length - 1, i + 2 + window); j++) {
+      if (words[j].s - words[i].s > maxSeconds) break;
+      if (t[j] === t[i] && t[j + 1] === t[i + 1]) {
+        out.push([i, j]);
+        i = j - 1; // continua depois do recomeço (sem sugestões sobrepostas)
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Lista as sugestões de corte. Não muda nada: a interface mostra, a pessoa aceita ou rejeita.
+ * Cada sugestão: { id, type, clipId, srcStart, srcEnd, start, end, seconds, reason }
+ *  - src*  = tempo no arquivo original (o que o corte usa)
+ *  - start/end = posição na linha do tempo (para marcar e ouvir)
+ * O id é estável enquanto o clipe não muda: aceitar/rejeitar sobrevive a recalcular a lista.
+ */
+export function suggestCuts(clips, transcripts, { minPause = 0.7, fillers = [], restarts = true } = {}) {
   const fillerSet = new Set(fillers.flatMap((f) => f.forms));
-  const pad = 0.12;
+  const out = [];
+  let t0 = 0;
+  for (const c of clips) {
+    const speed = c.speed || 1;
+    const segStart = t0;
+    t0 += (c.outPoint - c.inPoint) / speed;
+    const words = (transcripts?.[c.path]?.words || []).filter((w) => w.e > c.inPoint && w.s < c.outPoint);
+    if (!words.length) continue;
+    const add = (type, a, b, reason) => {
+      const s = clamp(a, c.inPoint, c.outPoint);
+      const e = clamp(b, c.inPoint, c.outPoint);
+      if (e - s < 0.05) return;
+      out.push({
+        id: `${c.id}:${type}:${s.toFixed(2)}`,
+        type, clipId: c.id, srcStart: s, srcEnd: e,
+        start: segStart + (s - c.inPoint) / speed,
+        end: segStart + (e - c.inPoint) / speed,
+        seconds: (e - s) / speed,
+        reason,
+      });
+    };
+    const fmt = (x) => `${x.toFixed(1).replace('.', ',')} s`;
+    if (minPause > 0) {
+      if (words[0].s - c.inPoint > minPause) add('pause', c.inPoint, words[0].s - PAD, `Silêncio de ${fmt(words[0].s - c.inPoint)} no início`);
+      for (let i = 0; i < words.length - 1; i++) {
+        const gap = words[i + 1].s - words[i].e;
+        if (gap > minPause) add('pause', words[i].e + PAD, words[i + 1].s - PAD, `Pausa de ${fmt(gap)} depois de “${words[i].w}”`);
+      }
+      const last = words[words.length - 1];
+      if (c.outPoint - last.e > minPause) add('pause', last.e + PAD, c.outPoint, `Silêncio de ${fmt(c.outPoint - last.e)} no fim`);
+    }
+    if (fillerSet.size) {
+      for (const w of words) if (fillerSet.has(norm(w.w))) add('filler', w.s - 0.03, w.e + 0.03, `“${w.w}”`);
+    }
+    if (restarts) {
+      for (const [i, j] of findRestarts(words)) {
+        const abandoned = words.slice(i, j).map((w) => w.w).join(' ');
+        add('restart', words[i].s - 0.03, words[j].s - 0.05, `Recomeçou: “${abandoned.length > 48 ? `${abandoned.slice(0, 47)}…` : abandoned}”`);
+      }
+    }
+  }
+  return out.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+/**
+ * Aplica só as sugestões aceitas: divide os clipes e remove os trechos (sobreposições são unidas).
+ * Retorna { clips, cuts, seconds }. Nunca deixa clipe menor que MIN_CLIP nem apaga um clipe inteiro.
+ */
+export function applyCuts(clips, accepted) {
+  const byClip = new Map();
+  for (const s of accepted) {
+    if (!byClip.has(s.clipId)) byClip.set(s.clipId, []);
+    byClip.get(s.clipId).push([s.srcStart, s.srcEnd]);
+  }
   let cuts = 0;
   let seconds = 0;
   const out = [];
-
   for (const c of clips) {
-    const words = (transcripts?.[c.path]?.words || []).filter((w) => w.e > c.inPoint && w.s < c.outPoint);
-    if (!words.length) {
+    const remove = byClip.get(c.id);
+    if (!remove?.length) {
       out.push(c);
       continue;
     }
-    const remove = [];
-    if (pauses) {
-      if (words[0].s - c.inPoint > minPause) remove.push([c.inPoint, words[0].s - pad]);
-      for (let i = 0; i < words.length - 1; i++) {
-        const a = words[i];
-        const b = words[i + 1];
-        if (b.s - a.e > minPause) remove.push([a.e + pad, b.s - pad]);
-      }
-      const last = words[words.length - 1];
-      if (c.outPoint - last.e > minPause) remove.push([last.e + pad, c.outPoint]);
-    }
-    if (fillerSet.size) {
-      for (const w of words) if (fillerSet.has(norm(w.w))) remove.push([w.s - 0.03, w.e + 0.03]);
-    }
-    if (!remove.length) {
-      out.push(c);
-      continue;
-    }
-
-    // junta trechos sobrepostos e calcula o que fica
     remove.sort((a, b) => a[0] - b[0]);
     const merged = [];
     for (const [a, b] of remove) {
@@ -224,14 +290,9 @@ export function planCleanup(clips, transcripts, { pauses = true, minPause = 0.7,
       cursor = Math.max(cursor, e);
     }
     if (c.outPoint - cursor >= MIN_CLIP) keep.push([cursor, c.outPoint]);
-    if (!keep.length) {
-      out.push(c);
-      continue;
-    }
-
     const kept = keep.reduce((n, [a, b]) => n + (b - a), 0);
     const removedHere = (c.outPoint - c.inPoint - kept) / (c.speed || 1);
-    if (removedHere < 0.05) {
+    if (!keep.length || removedHere < 0.05) {
       out.push(c);
       continue;
     }
@@ -249,6 +310,11 @@ export function planCleanup(clips, transcripts, { pauses = true, minPause = 0.7,
     });
   }
   return { clips: out, cuts, seconds };
+}
+
+/** Atalho: todas as pausas e vícios de uma vez (comportamento da v0.5). */
+export function planCleanup(clips, transcripts, { pauses = true, minPause = 0.7, fillers = [] } = {}) {
+  return applyCuts(clips, suggestCuts(clips, transcripts, { minPause: pauses ? minPause : 0, fillers, restarts: false }));
 }
 
 /** O que vai para a exportação: só tempos e textos */

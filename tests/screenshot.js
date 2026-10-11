@@ -11,7 +11,7 @@ const { app, BrowserWindow, dialog } = electron;
 const MODES = ['recuperar', 'legenda', 'mover', 'editar'];
 const mode = MODES.find((m) => process.argv.includes(m)) || 'editar';
 const outDir = process.argv[process.argv.length - 1];
-const tmp = path.join(__dirname, 'tmp');
+const tmp = process.env.KORTIN_SHOT_TMP || path.join(__dirname, 'tmp'); // KORTIN_SHOT_TMP: vídeos de demonstração para os prints do README
 const exportDir = path.join(tmp, 'exportados');
 app.setPath('userData', path.join(tmp, 'userdata'));
 
@@ -48,6 +48,7 @@ if (mode === 'legenda') {
   const { ipcMain } = electron;
   const fake = [
     [0.3, 0.7, 'Olá,'], [0.75, 1.0, 'é,'], [1.05, 1.35, 'tudo'], [1.4, 1.8, 'bem?'],
+    [2.2, 2.45, 'Hoje'], [2.5, 2.65, 'eu'], // começa…
     [2.9, 3.2, 'Hoje'], [3.25, 3.4, 'eu'], [3.45, 3.7, 'vou'], [3.75, 4.2, 'mostrar'], [4.25, 4.4, 'o'], [4.45, 4.9, 'Kortin.'],
     [5.0, 5.3, 'Hum,'], [5.35, 5.6, 'muito'], [5.62, 5.95, 'fácil!'],
   ].map(([s, e, w]) => ({ s, e, w }));
@@ -148,6 +149,28 @@ app.whenReady().then(async () => {
                dirty: !!document.querySelector('.dirty-dot') };
     `.replace('setter =', 'const setter ='));
     console.log('desfazer:', JSON.stringify(undo));
+
+    // música de fundo: o diálogo do Windows responde com a música de teste
+    const folderDialog = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path.join(tmp, 'musica.mp3')] });
+    await click('.music-card .btn', 'Escolher música');
+    await wait(1200);
+    dialog.showOpenDialog = folderDialog;
+    const mus = await js(`
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      const vol = document.querySelector('.music-card input[type=range]');
+      setter.call(vol, '0.4'); vol.dispatchEvent(new Event('input', { bubbles: true }));
+      vol.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      await wait(150);
+      return {
+        name: document.querySelector('.music-name strong')?.textContent,
+        info: document.querySelector('.music-name small')?.textContent,
+        volume: document.querySelector('.music-card .insp-control-head span')?.textContent,
+        lane: document.querySelector('.tl-music-bar')?.textContent,
+        loops: document.querySelectorAll('.tl-music-loop').length,
+      };
+    `);
+    console.log('música:', JSON.stringify(mus));
     await shot(win, 'kortin-editor-v02');
 
     // Exportar dois formatos de uma vez, em segundo plano
@@ -183,6 +206,23 @@ app.whenReady().then(async () => {
       };
     `);
     console.log('legendas:', JSON.stringify(r1));
+    // revisão de cortes: tipos, atalhos A/R e marcas na timeline
+    const review = await js(`
+      const types = [...document.querySelectorAll('.cut-item .cut-badge')].map(x => x.textContent);
+      const marks = document.querySelectorAll('.tl-cut').length;
+      const summary0 = document.querySelector('.cut-summary span').textContent;
+      const list = document.querySelector('.cut-list'); list.focus();
+      const restartIdx = [...document.querySelectorAll('.cut-item')].findIndex(x => x.classList.contains('cut-restart'));
+      [...document.querySelectorAll('.cut-item')][restartIdx].click(); await wait(100);
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })); await wait(150);
+      const summary1 = document.querySelector('.cut-summary span').textContent;
+      [...document.querySelectorAll('.cut-item')][0].click(); await wait(100);
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true })); await wait(150);
+      const summary2 = document.querySelector('.cut-summary span').textContent;
+      return { types, marks, summary0, summary1, summary2, clipsStill: document.querySelectorAll('.tl-clip').length };
+    `);
+    console.log('revisão:', JSON.stringify(review));
+    await shot(win, 'kortin-cortes-sugeridos');
     // posiciona em 1,5 s para ver a legenda com destaque na palavra
     await js(`document.querySelectorAll('.cap-item')[0].click(); await wait(200);`);
     await js(`

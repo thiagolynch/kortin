@@ -63,6 +63,7 @@ function Playhead({ store, zoom, scrollRef }) {
 
 function Timeline({
   segments, total, store, zoom, setZoom, selectedId, snap, peaksByPath, cues = [],
+  cutMarks, isCutOn, cutFocus, onCutClick, music,
   onSeek, onSelect, trim, onReorder,
 }) {
   const scrollRef = useRef(null);
@@ -263,6 +264,17 @@ function Timeline({
           })}
 
           {dropHint && <div className="tl-drop" style={{ left: dropHint.x - 1 }} />}
+
+          {/* cortes sugeridos: cheio = vai cortar, tracejado = rejeitado */}
+          {cutMarks?.map((m) => (
+            <div
+              key={m.id}
+              className={`tl-cut cut-${m.type}${isCutOn(m) ? ' on' : ''}${m.id === cutFocus ? ' focus' : ''}`}
+              style={{ left: PAD + m.start * zoom, width: Math.max(3, (m.end - m.start) * zoom) }}
+              title={`${m.reason} (${isCutOn(m) ? 'vai cortar' : 'mantido'})`}
+              onPointerDown={(e) => { e.stopPropagation(); onCutClick(m.id); }}
+            />
+          ))}
         </div>
 
         {cues.length > 0 && (
@@ -278,6 +290,18 @@ function Timeline({
                 {(c.end - c.start) * zoom > 40 && <span>{c.words.map((w) => w.text).join(' ')}</span>}
               </div>
             ))}
+          </div>
+        )}
+
+        {music && total > 0 && (
+          <div className="tl-music" aria-label="Música de fundo">
+            <div className={`tl-music-bar${music.duck ? ' duck' : ''}`} style={{ left: PAD, width: total * zoom }} title={`${music.name} · volume ${Math.round(music.volume * 100)}%${music.duck ? ' · abaixa com a fala' : ''}`}>
+              <span>♪ {music.name}</span>
+              {/* onde a música recomeça (repetição) */}
+              {music.duration > 0 && Array.from({ length: Math.max(0, Math.ceil(total / music.duration) - 1) }, (_, i) => (
+                <i key={i} className="tl-music-loop" style={{ left: (i + 1) * music.duration * zoom }} />
+              ))}
+            </div>
           </div>
         )}
 

@@ -5,7 +5,7 @@ const { app, dialog } = require('electron');
 const C = require('../../shared/constants.json');
 const store = require('../services/projectStore');
 const media = require('../services/projectMedia');
-const { assertProjectPath, assertVideoPath, ValidationError } = require('../core/security');
+const { assertProjectPath, assertVideoPath, assertAudioPath, ValidationError } = require('../core/security');
 const { handle } = require('./handle');
 const log = require('../core/logger');
 
@@ -20,6 +20,14 @@ function register(ctx) {
         grants.allowMedia(assertVideoPath(c.path));
       } catch (err) {
         log.warn('project', `vídeo recusado no projeto: ${err.message}`);
+      }
+    }
+    if (data.music?.path) {
+      try {
+        grants.allowMedia(assertAudioPath(data.music.path));
+      } catch (err) {
+        log.warn('project', `música recusada no projeto: ${err.message}`);
+        data.music = null; // eslint-disable-line no-param-reassign
       }
     }
     return data;
